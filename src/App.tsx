@@ -27,6 +27,11 @@ function AppRoutes() {
   if (!onboardingDone && !simulationMode && !setupRoutes.includes(location.pathname)) {
     return <Navigate to="/welcome" replace />;
   }
+  // Configured devices have no business on the auto-connect page (a stale
+  // #/welcome hash after setup would loop) — send them to the dashboard.
+  if (onboardingDone && location.pathname === '/welcome') {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <Routes>

@@ -40,6 +40,9 @@ export default function AutoConnect() {
     if (!embedded) return;
     const adopt = () => {
       configureFromEmbeddedAuth();
+      // Land on the dashboard after the reload — reloading at #/welcome
+      // would re-enter this page and loop.
+      window.location.hash = '#/';
       window.location.reload();
     };
     if (hasEmbeddedAuth()) {
