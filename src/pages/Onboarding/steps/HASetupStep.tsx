@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { updateSettings } from '../../../services/settingsStore';
 import { buildWsUrl } from '../../../services/haWebSocket';
+import { startOAuthLogin, referrerHassHost } from '../../../services/haAuth';
 
 interface Props {
   onComplete: () => void;
@@ -27,7 +28,7 @@ export async function testHA(url: string, port: number, token: string): Promise<
 }
 
 export default function HASetupStep({ onComplete, initialHA }: Props) {
-  const [url, setUrl] = useState(initialHA?.url ?? '');
+  const [url, setUrl] = useState(initialHA?.url ?? referrerHassHost());
   const [port, setPort] = useState(initialHA?.port ?? 8123);
   const [token, setToken] = useState(initialHA?.token ?? '');
   const [status, setStatus] = useState<'idle' | 'testing' | 'success' | 'error'>(initialHA?.error ? 'error' : 'idle');
@@ -119,6 +120,21 @@ export default function HASetupStep({ onComplete, initialHA }: Props) {
             onChange={(e) => { setPort(parseInt(e.target.value) || 8123); setStatus('idle'); }}
           />
         </div>
+      </div>
+
+      <div className="onboarding-field">
+        <button
+          className="onboarding-btn primary"
+          onClick={() => startOAuthLogin(url, port)}
+          disabled={!url}
+          style={{ width: '100%' }}
+        >
+          Sign in with Home Assistant
+        </button>
+        <p>
+          Recommended: log in once with your Home Assistant account — no token needed.
+          Enter your HA address above first. Or use a long-lived token below.
+        </p>
       </div>
 
       <div className="onboarding-field">

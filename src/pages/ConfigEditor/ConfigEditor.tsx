@@ -32,6 +32,7 @@ import {
 } from '../../babylon/DisplayMeshFactory';
 import { getConfig, updateConfig, getModelBlob } from '../../services/configApi';
 import { fetchModelFromHA } from '../../services/haSync';
+import { hasOAuth, getOAuthAccessToken } from '../../services/haAuth';
 import { getSetting } from '../../services/settingsStore';
 import { getEntityCache, setEntityCache } from '../../services/entityCache';
 import { HAConnection } from '../../services/haWebSocket';
@@ -93,9 +94,11 @@ export default function ConfigEditor() {
   useEffect(() => {
     if (haEntities.length > 0) return;
     const { mode, haSettings } = getSetting('connection');
-    if (mode !== 'live' || !haSettings.url || !haSettings.token) return;
+    if (mode !== 'live' || !haSettings.url || (!haSettings.token && !hasOAuth())) return;
     const conn = new HAConnection(
-      { url: haSettings.url, port: haSettings.port, token: haSettings.token },
+      hasOAuth()
+        ? { url: haSettings.url, port: haSettings.port, tokenProvider: getOAuthAccessToken }
+        : { url: haSettings.url, port: haSettings.port, token: haSettings.token },
       {
         onInitialStates: (states: HAState[]) => {
           const entities: HAEntityOption[] = states

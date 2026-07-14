@@ -21,6 +21,7 @@ import {
 } from '../../babylon/DisplayMeshFactory';
 import { getConfig, updateConfig, getModelBlob, replaceConfig, setConfigChangedHook, hasConfig } from '../../services/configApi';
 import { schedulePush, syncOnConnect, fetchModelFromHA } from '../../services/haSync';
+import { hasOAuth, getOAuthAccessToken } from '../../services/haAuth';
 import ToastHost, { showToast } from '../../components/Toast';
 import ZoneSwitcher from '../../components/ZoneSwitcher';
 import { getEntityCache, setEntityCache } from '../../services/entityCache';
@@ -1219,7 +1220,9 @@ export default function Dashboard() {
     } else {
       const haSettings = getSetting('connection').haSettings;
       const ha = new HAConnection(
-        { url: haSettings.url, port: haSettings.port, token: haSettings.token },
+        hasOAuth()
+          ? { url: haSettings.url, port: haSettings.port, tokenProvider: getOAuthAccessToken }
+          : { url: haSettings.url, port: haSettings.port, token: haSettings.token },
         callbacks,
       );
       haRef.current = ha;

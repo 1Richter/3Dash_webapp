@@ -26,7 +26,10 @@ export function getActiveHAConnection(): HALike | null { return activeConnection
 export interface HAConnectOptions {
   url: string;
   port: number;
-  token: string;
+  /** Long-lived access token. Ignored when tokenProvider is set. */
+  token?: string;
+  /** Async token source (OAuth) — called on every auth handshake so expired tokens refresh. */
+  tokenProvider?: () => Promise<string>;
 }
 
 /** Build a WebSocket URL, using wss:// when the page is served over HTTPS. */
@@ -67,7 +70,16 @@ export class HAConnection {
       const msg = JSON.parse(ev.data);
 
       if (msg.type === 'auth_required') {
-        this.send({ type: 'auth', access_token: this.options.token });
+        if (this.options.tokenProvider) {
+          this.options.tokenProvider()
+            .then((t) => this.send({ type: 'auth', access_token: t }))
+            .catch((e) => {
+              console.error('[haWebSocket] token refresh failed:', e);
+              this.callbacks.onStatusChanged?.('auth_error');
+            });
+        } else {
+          this.send({ type: 'auth', access_token: this.options.token });
+        }
         return;
       }
 
