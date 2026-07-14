@@ -32,11 +32,29 @@ import './App.css';
     );
   });
 
-// Auto-update service worker when new version is available; also poll
-// hourly so long-lived wall-mounted dashboards pick up new builds.
-registerSW({
-  immediate: true,
-  onRegisteredSW(_url, registration) {
-    if (registration) setInterval(() => registration.update(), 60 * 60 * 1000);
-  },
-});
+// Service worker: only for standalone hosting. When the app is served from
+// Home Assistant's /local/ folder, HA sends 31-day cache headers that also
+// pin sw.js itself, so a service worker would trap clients on stale builds.
+// There, hashed assets + the panel's ?v= cache-busting handle caching.
+const servedFromHA = window.location.pathname.includes('/local/');
+if (servedFromHA) {
+  navigator.serviceWorker?.getRegistrations().then(async (regs) => {
+    if (!regs.length) return;
+    for (const r of regs) await r.unregister();
+    for (const k of await caches.keys()) await caches.delete(k);
+    // Detach this page from the stale worker exactly once
+    if (navigator.serviceWorker.controller && !sessionStorage.getItem('3dash_sw_purged')) {
+      sessionStorage.setItem('3dash_sw_purged', '1');
+      window.location.reload();
+    }
+  });
+} else {
+  // Auto-update when a new version is available; also poll hourly so
+  // long-lived wall-mounted dashboards pick up new builds.
+  registerSW({
+    immediate: true,
+    onRegisteredSW(_url, registration) {
+      if (registration) setInterval(() => registration.update(), 60 * 60 * 1000);
+    },
+  });
+}
