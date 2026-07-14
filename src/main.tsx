@@ -3,13 +3,25 @@ import { createRoot } from 'react-dom/client';
 import { HashRouter } from 'react-router-dom';
 import { registerSW } from 'virtual:pwa-register';
 import { completeOAuthLogin } from './services/haAuth';
+import { initEmbeddedAuth, configureFromEmbeddedAuth } from './services/embeddedAuth';
 import App from './App';
 import './App.css';
 
-// If the URL carries an OAuth code from Home Assistant, finish the login
-// (saves tokens + configures HA sync) before the router sees the URL.
-completeOAuthLogin()
-  .catch((e) => console.error('[haAuth] Sign in with Home Assistant failed:', e))
+// Resolve authentication before the router sees the URL:
+// 1. Embedded in the HA custom panel → adopt the HA session's token.
+// 2. URL carries an OAuth code from Home Assistant → finish that login.
+(async () => {
+  try {
+    if (await initEmbeddedAuth()) configureFromEmbeddedAuth();
+  } catch (e) {
+    console.error('[embeddedAuth] failed:', e);
+  }
+  try {
+    await completeOAuthLogin();
+  } catch (e) {
+    console.error('[haAuth] Sign in with Home Assistant failed:', e);
+  }
+})()
   .finally(() => {
     createRoot(document.getElementById('root')!).render(
       <StrictMode>
