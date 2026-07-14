@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard/Dashboard';
 const ConfigEditor = lazy(() => import('./pages/ConfigEditor/ConfigEditor'));
 const Onboarding = lazy(() => import('./pages/Onboarding/Onboarding'));
 const Connect = lazy(() => import('./pages/Connect/Connect'));
+const AutoConnect = lazy(() => import('./pages/Connect/AutoConnect'));
 
 function AppRoutes() {
   const location = useLocation();
@@ -19,10 +20,12 @@ function AppRoutes() {
   const configExists = hasConfig();
   const onboardingDone = configExists && (getConfig().onboarding?.completed ?? false);
 
-  // Redirect to onboarding if not completed and not already there
-  // (simulation mode and the one-tap /connect link bypass onboarding)
-  if (!onboardingDone && !simulationMode && location.pathname !== '/onboarding' && location.pathname !== '/connect') {
-    return <Navigate to="/onboarding" replace />;
+  // Unconfigured devices land on /welcome: deployments that declare their HA
+  // URL forward straight to the HA sign-in, others fall through to onboarding.
+  // (Simulation mode and the one-tap /connect link bypass this.)
+  const setupRoutes = ['/onboarding', '/connect', '/welcome'];
+  if (!onboardingDone && !simulationMode && !setupRoutes.includes(location.pathname)) {
+    return <Navigate to="/welcome" replace />;
   }
 
   return (
@@ -31,6 +34,7 @@ function AppRoutes() {
       <Route path="/editor" element={<Suspense fallback={null}><ConfigEditor /></Suspense>} />
       <Route path="/onboarding" element={<Suspense fallback={null}><Onboarding /></Suspense>} />
       <Route path="/connect" element={<Suspense fallback={null}><Connect /></Suspense>} />
+      <Route path="/welcome" element={<Suspense fallback={null}><AutoConnect /></Suspense>} />
     </Routes>
   );
 }

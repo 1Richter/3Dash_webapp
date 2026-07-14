@@ -21,6 +21,31 @@ import { getConfig, updateConfig, replaceConfig } from './configApi';
 
 const STORAGE_KEY = 'haOAuth';
 
+/* ── Runtime defaults (deployment-provided, e.g. docker env) ── */
+
+export interface RuntimeDefaults {
+  /** Base URL of the Home Assistant instance this deployment belongs to. */
+  haUrl?: string;
+}
+
+let runtimeDefaults: RuntimeDefaults | null = null;
+
+/**
+ * Deployment-level defaults served as a static `app-config.json` next to the
+ * app (written by the container entrypoint from env vars). Missing file =
+ * generic deployment with no defaults.
+ */
+export async function getRuntimeDefaults(): Promise<RuntimeDefaults> {
+  if (runtimeDefaults) return runtimeDefaults;
+  try {
+    const resp = await fetch('app-config.json', { cache: 'no-cache' });
+    runtimeDefaults = resp.ok ? (await resp.json() as RuntimeDefaults) : {};
+  } catch {
+    runtimeDefaults = {};
+  }
+  return runtimeDefaults;
+}
+
 interface StoredOAuth {
   hassUrl: string;       // e.g. https://homeassistant.example.net
   accessToken: string;
