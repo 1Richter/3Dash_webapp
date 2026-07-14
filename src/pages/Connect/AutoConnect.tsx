@@ -26,6 +26,14 @@ export default function AutoConnect() {
   // undefined = loading, null = no deployment default → manual onboarding
   const [haUrl, setHaUrl] = useState<string | null | undefined>(undefined);
   const [autoTried] = useState(() => sessionStorage.getItem(TRIED_KEY) === '1');
+  const [stuck, setStuck] = useState(false);
+
+  // Embedded: surface troubleshooting options when no token arrives
+  useEffect(() => {
+    if (!embedded) return;
+    const t = setTimeout(() => setStuck(true), 15000);
+    return () => clearTimeout(t);
+  }, [embedded]);
 
   // Embedded: adopt the HA session as soon as the parent panel delivers it
   useEffect(() => {
@@ -60,7 +68,24 @@ export default function AutoConnect() {
       <div className="onboarding-step" style={{ textAlign: 'center', paddingTop: '20vh' }}>
         <h1>3Dash</h1>
         <h2>Connecting to your Home Assistant session…</h2>
-        <p>This usually takes a second. If nothing happens, update Home Assistant's 3Dash panel.</p>
+        {stuck ? (
+          <>
+            <p>
+              Still waiting for the Home Assistant panel to hand over the session.
+              The panel script may be outdated or cached.
+            </p>
+            <button className="onboarding-btn primary" onClick={() => window.location.reload()}>
+              Retry
+            </button>
+            <p style={{ marginTop: 16 }}>
+              <button className="onboarding-btn" onClick={() => navigate('/onboarding', { replace: true })}>
+                Set up manually instead
+              </button>
+            </p>
+          </>
+        ) : (
+          <p>This usually takes a second.</p>
+        )}
       </div>
     );
   }

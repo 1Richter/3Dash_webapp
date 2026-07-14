@@ -79,6 +79,10 @@ export function createScene(
   camera.lowerRadiusLimit = 5;
   camera.upperRadiusLimit = 60;
   camera.wheelPrecision = 5;
+  // Percentage-based zoom: each step moves a fraction of the current radius,
+  // so zoom speed adapts to the model's scale instead of using fixed units.
+  camera.wheelDeltaPercentage = 0.01;
+  camera.pinchDeltaPercentage = 0.001;
   camera.attachControl(canvas, true);
 
   // Ambient fill light — gentle fill so HA lights stand out

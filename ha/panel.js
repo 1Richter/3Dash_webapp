@@ -67,18 +67,39 @@ class ThreeDashPanel extends HTMLElement {
       }
     });
     this._iframe.addEventListener('load', () => this._sendAuth());
+    // Proactive resend: covers races and webviews (companion app) where the
+    // app's ready message can be missed. Cheap — the app ignores duplicates.
+    setInterval(() => this._sendAuth(), 3000);
   }
 
   _sendAuth() {
     if (!this._hass || !this._iframe || !this._iframe.contentWindow) return;
-    const auth = this._hass.auth && this._hass.auth.data;
-    if (!auth || !auth.access_token) return;
+    const auth = this._hass.auth;
+    if (!auth) return;
+
+    // Companion apps use an external auth object — refresh through it when
+    // the current token is expired instead of forwarding a dead one.
+    if (auth.expired && typeof auth.refreshAccessToken === 'function') {
+      if (!this._refreshing) {
+        this._refreshing = true;
+        auth.refreshAccessToken()
+          .then(() => { this._refreshing = false; this._sendAuth(); })
+          .catch((err) => { this._refreshing = false; console.warn('3dash-panel: token refresh failed', err); });
+      }
+      return;
+    }
+
+    const token = auth.accessToken || (auth.data && auth.data.access_token);
+    if (!token) {
+      console.warn('3dash-panel: no access token available yet');
+      return;
+    }
     this._iframe.contentWindow.postMessage(
       {
         type: '3dash-auth',
-        hassUrl: auth.hassUrl || window.location.origin,
-        accessToken: auth.access_token,
-        expiresAt: typeof auth.expires === 'number' ? auth.expires : undefined,
+        hassUrl: (auth.data && auth.data.hassUrl) || window.location.origin,
+        accessToken: token,
+        expiresAt: auth.data && typeof auth.data.expires === 'number' ? auth.data.expires : undefined,
       },
       this._appOrigin,
     );

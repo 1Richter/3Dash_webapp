@@ -20,7 +20,7 @@ import {
   type DisplayMeshMap,
 } from '../../babylon/DisplayMeshFactory';
 import { getConfig, updateConfig, getModelBlob, replaceConfig, setConfigChangedHook, hasConfig } from '../../services/configApi';
-import { schedulePush, syncOnConnect, fetchModelFromHA } from '../../services/haSync';
+import { schedulePush, syncOnConnect, fetchModelFromHA, pullRemoteConfig } from '../../services/haSync';
 import { hasOAuth, getOAuthAccessToken } from '../../services/haAuth';
 import { hasEmbeddedAuth, getEmbeddedAccessToken } from '../../services/embeddedAuth';
 import ToastHost, { showToast } from '../../components/Toast';
@@ -171,6 +171,26 @@ export default function Dashboard() {
   }, [simulationMode, demoMode]);
 
   const syncAttemptedRef = useRef(false);
+
+  // Kiosk/wall-tablet freshness: periodically check HA for a newer config and
+  // reload into it. Entity states are already live via WebSocket; this covers
+  // config/model edits made on other devices while the page stays open.
+  useEffect(() => {
+    if (simulationMode || demoMode) return;
+    const timer = setInterval(async () => {
+      if (!getSetting('sync').autoSync) return;
+      try {
+        const remote = await pullRemoteConfig();
+        const localTs = getConfig().updatedAt ?? 0;
+        if (remote && remote.updatedAt > localTs) {
+          replaceConfig(remote.config);
+          showToast('info', 'Config updated on another device — reloading…');
+          setTimeout(() => window.location.reload(), 1200);
+        }
+      } catch { /* offline or HA restarting — try again next tick */ }
+    }, 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [simulationMode, demoMode]);
   const [cardStates, setCardStates] = useState<Record<string, HAState>>({});
   const [gridEditMode, setGridEditMode] = useState(false);
   const [cardPanelOpen, setCardPanelOpen] = useState(false);
@@ -1271,8 +1291,14 @@ export default function Dashboard() {
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
 
+    // Kiosk devices stay visible but can lose the network (Wi-Fi drop,
+    // router reboot) — reconnect as soon as connectivity returns.
+    const onOnline = () => haRef.current?.forceReconnect();
+    window.addEventListener('online', onOnline);
+
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('online', onOnline);
       haRef.current?.dispose();
       haRef.current = null;
       setActiveHAConnection(null);
@@ -1648,9 +1674,12 @@ export default function Dashboard() {
     const isMobile = window.matchMedia('(pointer: coarse)').matches;
     const flags = isMobile ? camControls.mobile : camControls.desktop;
 
-    // Zoom: wheelPrecision for mouse, pinchPrecision for touch
+    // Zoom: percentage-based so speed adapts to model scale; a zero
+    // percentage plus huge precision disables zooming entirely.
     camera.wheelPrecision = flags.zoom ? 5 : 99999;
     camera.pinchPrecision = flags.zoom ? 12 : 99999;
+    camera.wheelDeltaPercentage = flags.zoom ? 0.01 : 0;
+    camera.pinchDeltaPercentage = flags.zoom ? 0.001 : 0;
 
     // Rotate: angular sensibility (higher = less sensitive, huge = disabled)
     const rotVal = flags.rotate ? 800 : 99999;
