@@ -29,10 +29,11 @@ class ThreeDashPanel extends HTMLElement {
     this._appOrigin = null;
   }
 
-  // HA calls this with panel_custom's `config:` block
+  // HA calls this with panel_custom's `config:` block. `url` may be absolute
+  // (self-hosted app) or relative (app served from HA's own /local/ folder).
   set panel(panel) {
-    this._appUrl = (panel && panel.config && panel.config.url) || 'https://3dash.lrichter.net/';
-    this._appOrigin = new URL(this._appUrl).origin;
+    this._appUrl = (panel && panel.config && panel.config.url) || '/local/3dash/app/index.html';
+    this._appOrigin = new URL(this._appUrl, window.location.origin).origin;
     this._render();
   }
 
