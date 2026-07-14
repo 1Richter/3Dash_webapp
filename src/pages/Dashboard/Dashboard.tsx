@@ -788,19 +788,48 @@ export default function Dashboard() {
         modelDiagonalRef.current = result.diagonal;
 
         const savedPose = getSetting('controls').homeView;
+        let finalAlpha: number, finalBeta: number, finalRadius: number, finalTarget: Vector3;
         if (savedPose) {
-          ctx.camera.target = new Vector3(savedPose.target.x, savedPose.target.y, savedPose.target.z);
-          ctx.camera.alpha = savedPose.alpha;
-          ctx.camera.beta = savedPose.beta;
-          ctx.camera.radius = savedPose.radius;
+          finalTarget = new Vector3(savedPose.target.x, savedPose.target.y, savedPose.target.z);
+          finalAlpha = savedPose.alpha;
+          finalBeta = savedPose.beta;
+          finalRadius = savedPose.radius;
         } else {
           // Default: center at floor level, top-down view
-          const target = result.center.clone();
-          target.y = 0;
-          ctx.camera.target = target;
-          ctx.camera.alpha = Tools.ToRadians(270);
-          ctx.camera.beta = Tools.ToRadians(0.5);
-          ctx.camera.radius = computeIdealRadius();
+          finalTarget = result.center.clone();
+          finalTarget.y = 0;
+          finalAlpha = Tools.ToRadians(270);
+          finalBeta = Tools.ToRadians(0.5);
+          finalRadius = computeIdealRadius();
+        }
+        ctx.camera.target = finalTarget;
+
+        // Cinematic fly-in: start from a distant low orbit and glide into
+        // the home view. Purely visual — controls stay detached until done.
+        {
+          const cam = ctx.camera;
+          cam.alpha = finalAlpha - 0.85;
+          cam.beta = Math.min(Math.max(finalBeta + 0.55, 0.9), 1.25);
+          cam.radius = Math.min(finalRadius * 2.2, result.diagonal * 4);
+          cam.detachControl();
+          const fps = 60;
+          const frames = 110;
+          const ease = new CubicEase();
+          ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
+          const anim = (prop: string, from: number, to: number) => {
+            const a = new Animation(`intro_${prop}`, prop, fps, Animation.ANIMATIONTYPE_FLOAT, Animation.ANIMATIONLOOPMODE_CONSTANT);
+            a.setKeys([{ frame: 0, value: from }, { frame: frames, value: to }]);
+            a.setEasingFunction(ease);
+            return a;
+          };
+          cam.animations = [
+            anim('alpha', cam.alpha, finalAlpha),
+            anim('beta', cam.beta, finalBeta),
+            anim('radius', cam.radius, finalRadius),
+          ];
+          ctx.scene.beginAnimation(cam, 0, frames, false, 1, () => {
+            cam.attachControl(true);
+          });
         }
 
         createModelShadow(ctx.scene, result.center, result.size);
