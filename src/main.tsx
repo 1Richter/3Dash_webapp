@@ -32,5 +32,11 @@ import './App.css';
     );
   });
 
-// Auto-update service worker when new version is available
-registerSW({ immediate: true });
+// Auto-update service worker when new version is available; also poll
+// hourly so long-lived wall-mounted dashboards pick up new builds.
+registerSW({
+  immediate: true,
+  onRegisteredSW(_url, registration) {
+    if (registration) setInterval(() => registration.update(), 60 * 60 * 1000);
+  },
+});

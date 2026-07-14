@@ -1,23 +1,48 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { getRuntimeDefaults, startOAuthLogin } from '../../services/haAuth';
+import {
+  isEmbedded,
+  hasEmbeddedAuth,
+  onEmbeddedAuth,
+  configureFromEmbeddedAuth,
+} from '../../services/embeddedAuth';
 
 /**
- * Landing page for unconfigured devices on deployments that declare their
- * Home Assistant URL (app-config.json). Immediately forwards to the HA
- * sign-in — a new phone only has to tap "approve" on its HA login. Falls
- * back to the manual onboarding wizard when no default URL is configured
- * or when a previous auto sign-in attempt didn't complete.
+ * Landing page for unconfigured devices.
+ *
+ * Embedded in the HA custom panel: wait for the parent to deliver the HA
+ * session token (it may arrive late on slow devices), then reload into the
+ * dashboard — never redirect away, that would hijack the HA frontend.
+ *
+ * Standalone with a deployment-declared HA URL (app-config.json): forward
+ * straight to the HA sign-in. Otherwise: manual onboarding wizard.
  */
 const TRIED_KEY = '3dash_auto_auth_tried';
 
 export default function AutoConnect() {
   const navigate = useNavigate();
+  const embedded = isEmbedded();
   // undefined = loading, null = no deployment default → manual onboarding
   const [haUrl, setHaUrl] = useState<string | null | undefined>(undefined);
   const [autoTried] = useState(() => sessionStorage.getItem(TRIED_KEY) === '1');
 
+  // Embedded: adopt the HA session as soon as the parent panel delivers it
   useEffect(() => {
+    if (!embedded) return;
+    const adopt = () => {
+      configureFromEmbeddedAuth();
+      window.location.reload();
+    };
+    if (hasEmbeddedAuth()) {
+      adopt();
+      return;
+    }
+    return onEmbeddedAuth(adopt);
+  }, [embedded]);
+
+  useEffect(() => {
+    if (embedded) return;
     getRuntimeDefaults().then((d) => {
       const url = d.haUrl || null;
       setHaUrl(url);
@@ -28,7 +53,17 @@ export default function AutoConnect() {
         startOAuthLogin(url);
       }
     });
-  }, [autoTried]);
+  }, [autoTried, embedded]);
+
+  if (embedded) {
+    return (
+      <div className="onboarding-step" style={{ textAlign: 'center', paddingTop: '20vh' }}>
+        <h1>3Dash</h1>
+        <h2>Connecting to your Home Assistant session…</h2>
+        <p>This usually takes a second. If nothing happens, update Home Assistant's 3Dash panel.</p>
+      </div>
+    );
+  }
 
   if (haUrl === undefined) return null;
   if (haUrl === null) return <Navigate to="/onboarding" replace />;

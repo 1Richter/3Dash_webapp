@@ -29,8 +29,22 @@ interface EmbeddedAuthState {
 let state: EmbeddedAuthState | null = null;
 let listenerInstalled = false;
 const freshTokenWaiters: Array<() => void> = [];
+const authListeners: Array<() => void> = [];
 
-function isEmbedded(): boolean {
+/**
+ * Subscribe to embedded-auth arrival (fires on every auth message, including
+ * ones that arrive after the boot handshake timed out). Returns unsubscribe.
+ */
+export function onEmbeddedAuth(cb: () => void): () => void {
+  installListener();
+  authListeners.push(cb);
+  return () => {
+    const i = authListeners.indexOf(cb);
+    if (i >= 0) authListeners.splice(i, 1);
+  };
+}
+
+export function isEmbedded(): boolean {
   try {
     return window.self !== window.top;
   } catch {
@@ -55,6 +69,7 @@ function installListener(): void {
       origin: e.origin,
     };
     while (freshTokenWaiters.length) freshTokenWaiters.shift()!();
+    for (const cb of [...authListeners]) cb();
   });
 }
 
@@ -76,6 +91,15 @@ export async function initEmbeddedAuth(timeoutMs = 1500): Promise<boolean> {
     const t = setTimeout(resolve, timeoutMs);
     freshTokenWaiters.push(() => { clearTimeout(t); resolve(); });
   });
+  if (state === null) {
+    // Parent may still be booting (slow mobile, hass not set yet) — keep
+    // announcing for a while; late auth is delivered via onEmbeddedAuth().
+    let attempts = 0;
+    const timer = setInterval(() => {
+      if (state !== null || ++attempts > 15) { clearInterval(timer); return; }
+      window.parent.postMessage({ type: '3dash-ready' }, '*');
+    }, 2000);
+  }
   return state !== null;
 }
 
