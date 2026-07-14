@@ -33,7 +33,7 @@ import {
 import { getConfig, updateConfig, getModelBlob } from '../../services/configApi';
 import { fetchModelFromHA } from '../../services/haSync';
 import { hasOAuth, getOAuthAccessToken } from '../../services/haAuth';
-import { hasEmbeddedAuth, getEmbeddedAccessToken } from '../../services/embeddedAuth';
+import { hasEmbeddedAuth, isEmbedded, getEmbeddedAccessToken } from '../../services/embeddedAuth';
 import { getSetting } from '../../services/settingsStore';
 import { getEntityCache, setEntityCache } from '../../services/entityCache';
 import { HAConnection } from '../../services/haWebSocket';
@@ -95,9 +95,10 @@ export default function ConfigEditor() {
   useEffect(() => {
     if (haEntities.length > 0) return;
     const { mode, haSettings } = getSetting('connection');
-    if (mode !== 'live' || !haSettings.url || (!haSettings.token && !hasOAuth() && !hasEmbeddedAuth())) return;
+    const embedded = hasEmbeddedAuth() || (isEmbedded() && !haSettings.token && !hasOAuth());
+    if (mode !== 'live' || !haSettings.url || (!haSettings.token && !hasOAuth() && !embedded)) return;
     const conn = new HAConnection(
-      hasEmbeddedAuth()
+      embedded
         ? { url: haSettings.url, port: haSettings.port, tokenProvider: getEmbeddedAccessToken }
         : hasOAuth()
           ? { url: haSettings.url, port: haSettings.port, tokenProvider: getOAuthAccessToken }

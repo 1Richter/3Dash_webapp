@@ -22,7 +22,7 @@ import {
 import { getConfig, updateConfig, getModelBlob, replaceConfig, setConfigChangedHook, hasConfig } from '../../services/configApi';
 import { schedulePush, syncOnConnect, fetchModelFromHA, pullRemoteConfig } from '../../services/haSync';
 import { hasOAuth, getOAuthAccessToken } from '../../services/haAuth';
-import { hasEmbeddedAuth, getEmbeddedAccessToken } from '../../services/embeddedAuth';
+import { hasEmbeddedAuth, isEmbedded, getEmbeddedAccessToken } from '../../services/embeddedAuth';
 import ToastHost, { showToast } from '../../components/Toast';
 import ZoneSwitcher from '../../components/ZoneSwitcher';
 import { getEntityCache, setEntityCache } from '../../services/entityCache';
@@ -1269,8 +1269,13 @@ export default function Dashboard() {
       demo.start(config.lights, sensorIds);
     } else {
       const haSettings = getSetting('connection').haSettings;
+      // Embedded (HA panel) sessions may deliver their token slightly after
+      // boot — use the waiting embedded provider whenever we're iframed and
+      // have no own credentials, or once a token has actually arrived.
+      const useEmbedded = hasEmbeddedAuth()
+        || (isEmbedded() && !haSettings.token && !hasOAuth());
       const ha = new HAConnection(
-        hasEmbeddedAuth()
+        useEmbedded
           ? { url: haSettings.url, port: haSettings.port, tokenProvider: getEmbeddedAccessToken }
           : hasOAuth()
             ? { url: haSettings.url, port: haSettings.port, tokenProvider: getOAuthAccessToken }

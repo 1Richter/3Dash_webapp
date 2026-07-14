@@ -105,6 +105,16 @@ export async function initEmbeddedAuth(timeoutMs = 1500): Promise<boolean> {
 
 /** Token provider for HAConnection — asks the parent for a fresh token when needed. */
 export async function getEmbeddedAccessToken(): Promise<string> {
+  if (!state && isEmbedded()) {
+    // The parent panel resends auth every few seconds — wait for the first
+    // message (covers reconnects racing ahead of the parent's handshake).
+    installListener();
+    window.parent.postMessage({ type: '3dash-ready' }, '*');
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(resolve, 10_000);
+      freshTokenWaiters.push(() => { clearTimeout(t); resolve(); });
+    });
+  }
   if (!state) throw new Error('No embedded Home Assistant session');
   if (Date.now() < state.expiresAt - 30_000) return state.accessToken;
   window.parent.postMessage({ type: '3dash-token-request' }, state.origin);
