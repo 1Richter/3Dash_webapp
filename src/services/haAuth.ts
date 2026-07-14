@@ -17,7 +17,7 @@
  */
 
 import { updateSettings } from './settingsStore';
-import { getConfig, updateConfig } from './configApi';
+import { getConfig, updateConfig, replaceConfig } from './configApi';
 
 const STORAGE_KEY = 'haOAuth';
 
@@ -143,6 +143,9 @@ export async function completeOAuthLogin(): Promise<boolean> {
     onboarding: { completed: true },
     location: cfg.location ?? { latitude: 51.0, longitude: 10.0 },
   });
+  // Zero the timestamp: this device starts empty, so any remote config
+  // must win the first sync instead of being clobbered by this stub.
+  replaceConfig({ ...getConfig(), updatedAt: 0 });
 
   // Remove ?code=&state= so a reload doesn't retry the (single-use) code
   window.history.replaceState({}, '', window.location.pathname + window.location.hash);
