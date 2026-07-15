@@ -11,6 +11,7 @@ import {
   type ISceneLoaderProgressEvent,
 } from '@babylonjs/core';
 import '@babylonjs/loaders/glTF';
+import { installMeshoptDecoder } from './meshoptSupport';
 
 
 export interface ModelLoadResult {
@@ -60,6 +61,7 @@ export async function loadModel(
     file = source.substring(source.lastIndexOf('/') + 1);
   }
 
+  installMeshoptDecoder();
   const t0 = performance.now();
   const result = await SceneLoader.ImportMeshAsync(
     '',
