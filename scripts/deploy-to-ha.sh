@@ -23,8 +23,9 @@
 #       config:
 #         url: /local/3dash/app/index.html?v=1
 #
-# Bump both ?v= numbers after each deploy so browsers refetch past HA's
-# 31-day static cache.
+# The panel busts index.html's cache itself on every load; panel.js's own
+# ?v= in module_url is rewritten to its content hash by this script (HA
+# restart required when it changes, because /local/ is cached for 31 days).
 
 set -e
 
@@ -47,6 +48,18 @@ cp ha/panel.js "$DEST/panel.js"
 
 if [ -n "$HA_URL" ]; then
   printf '{"haUrl":"%s"}' "$HA_URL" > "$DEST/app/app-config.json"
+fi
+
+# Rewrite the panel.js cache-bust version in configuration.yaml to the file's
+# content hash, so stale copies can never survive a deploy.
+YAML="$CONFIG_DIR/configuration.yaml"
+if [ -f "$YAML" ] && grep -q '/local/3dash/panel.js' "$YAML"; then
+  PANEL_V=$(md5sum ha/panel.js | cut -c1-8)
+  if ! grep -q "panel.js?v=$PANEL_V" "$YAML"; then
+    sed -i -E "s|(/local/3dash/panel\.js\?v=)[A-Za-z0-9]+|\1$PANEL_V|" "$YAML"
+    echo "panel.js changed -> module_url bumped to ?v=$PANEL_V"
+    echo "Restart Home Assistant to pick it up."
+  fi
 fi
 
 echo "Deployed to $DEST"

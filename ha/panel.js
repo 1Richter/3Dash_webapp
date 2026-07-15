@@ -32,8 +32,14 @@ class ThreeDashPanel extends HTMLElement {
   // HA calls this with panel_custom's `config:` block. `url` may be absolute
   // (self-hosted app) or relative (app served from HA's own /local/ folder).
   set panel(panel) {
-    this._appUrl = (panel && panel.config && panel.config.url) || '/local/3dash/app/index.html';
-    this._appOrigin = new URL(this._appUrl, window.location.origin).origin;
+    const url = (panel && panel.config && panel.config.url) || '/local/3dash/app/index.html';
+    // HA serves /local/ with 31-day cache headers. A per-load cache-buster on
+    // index.html keeps every device on the newest build (the heavy assets are
+    // content-hashed, so they still cache normally).
+    const u = new URL(url, window.location.origin);
+    u.searchParams.set('cb', Date.now().toString(36));
+    this._appUrl = u.toString();
+    this._appOrigin = u.origin;
     this._render();
   }
 
