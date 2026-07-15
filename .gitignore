@@ -8,3 +8,12 @@ CLAUDE.md
 server/certs/
 .local-model/
 HANDOFF.md
+# local dev-tool output
+.playwright-mcp/
+graphify-out/
+*.jpeg
+# personal 3D models must never be committed (repo-root and stray copies;
+# the tracked sample public/simulation_model.glb is unaffected)
+/*.glb
+/*.obj
+model*.glb
