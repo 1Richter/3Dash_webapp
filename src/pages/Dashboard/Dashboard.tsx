@@ -41,6 +41,7 @@ import { createWeatherEffects, type WeatherEffectsContext } from '../../babylon/
 import { fetchWeather, type WeatherData } from '../../services/weatherApi';
 import { showGroundGrid, hideGroundGrid, syncGridColors, disposeGroundGrid, createModelShadow } from '../../babylon/GroundGrid';
 import { createTubeMeshes, updateTubeValue, disposeAllTubes, setTubeTheme, type TubeMap } from '../../babylon/TubeMeshFactory';
+import { applyDoorState, resetDoorPivots } from '../../babylon/doorOpenings';
 import HUD from '../../components/HUD';
 import LightModal from '../../components/LightModal';
 import RemoteModal from '../../components/RemoteModal';
@@ -52,7 +53,7 @@ import GuidedTour from '../../components/GuidedTour/GuidedTour';
 import { dashboardTourSteps } from '../../components/GuidedTour/tourSteps';
 import CardPropertiesPanel from '../../components/SidePanel/CardPropertiesPanel';
 import { SIMULATION_CONFIG, SIMULATION_MODEL_URL } from '../../data/simulationData';
-import type { AppConfig, DisplayConfig, LightConfig, RemoteButton, HAState, CardLayout, SidePanelCard, ZoneConfig } from '../../types';
+import type { AppConfig, DisplayConfig, DoorConfig, LightConfig, RemoteButton, HAState, CardLayout, SidePanelCard, ZoneConfig } from '../../types';
 import './Dashboard.css';
 
 const LONG_PRESS_MS = 500;
@@ -1127,6 +1128,7 @@ export default function Dashboard() {
       weatherRef.current?.dispose();
       weatherRef.current = null;
       disposeGroundGrid();
+      resetDoorPivots();
       ctx.dispose();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1151,6 +1153,12 @@ export default function Dashboard() {
       if (l.type === 'remote' && l.modeEntityId) {
         modeSensorToLight[l.modeEntityId] = l.entityId;
       }
+    }
+
+    // Contact-sensor → animated door/window opening
+    const doorByEntity: Record<string, DoorConfig> = {};
+    for (const d of config.doors ?? []) {
+      if (d.entityId) doorByEntity[d.entityId] = d;
     }
 
     const callbacks = {
@@ -1190,6 +1198,12 @@ export default function Dashboard() {
         if (entityId === modalEntityIdRef.current) setModalState(state);
         if (entityId === modalDoubleTapEntityIdRef.current) setModalDoubleTapState(state);
         if (entityId === remoteModalEntityIdRef.current) setRemoteModalState(state);
+
+        // Contact sensor changed → swing the bound door/window
+        if (doorByEntity[entityId]) {
+          const scene = sceneCtxRef.current?.scene;
+          if (scene) applyDoorState(scene, doorByEntity[entityId], state.state === 'on');
+        }
 
         // Mode sensor changed → re-apply color to the associated remote light
         if (modeSensorToLight[entityId]) {
@@ -1247,6 +1261,16 @@ export default function Dashboard() {
           const modeState = lastStatesRef.current[modeEntityId];
           if (modeState?.state && modeState.state !== 'unknown' && modeState.state !== 'unavailable') {
             applyRemoteMode(lightId, modeState.state);
+          }
+        }
+        // Pose doors/windows to their initial sensor state (no animation)
+        {
+          const scene = sceneCtxRef.current?.scene;
+          if (scene) {
+            for (const [entityId, door] of Object.entries(doorByEntity)) {
+              const st = lastStatesRef.current[entityId];
+              if (st) applyDoorState(scene, door, st.state === 'on', false);
+            }
           }
         }
         // Update all tube labels with initial state

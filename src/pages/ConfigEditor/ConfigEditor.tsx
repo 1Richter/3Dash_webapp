@@ -46,11 +46,13 @@ import ShadowWallList from '../../components/ShadowWallList';
 import ShadowWallForm, { type WallPreviewInfo } from '../../components/ShadowWallForm';
 import { arrayMove } from '@dnd-kit/sortable';
 import TubeList from '../../components/TubeList';
+import DoorList from '../../components/DoorList';
+import { detectOpenings, applyDoorState, resetDoorPivots, type DetectedOpening } from '../../babylon/doorOpenings';
 import TubeForm, { type TubePreviewInfo } from '../../components/TubeForm';
 import { createTubeMeshes, removeTubeMeshes, disposeAllTubes, renderMockupLabels, type TubeMap } from '../../babylon/TubeMeshFactory';
 import GuidedTour from '../../components/GuidedTour/GuidedTour';
 import { editorTourSteps } from '../../components/GuidedTour/tourSteps';
-import type { LightConfig, LightGroup, DisplayConfig, ShadowWallConfig, TubeConfig, LightPosition, HAState } from '../../types';
+import type { LightConfig, LightGroup, DisplayConfig, DoorConfig, ShadowWallConfig, TubeConfig, LightPosition, HAState } from '../../types';
 import './ConfigEditor.css';
 
 export default function ConfigEditor() {
@@ -88,8 +90,8 @@ export default function ConfigEditor() {
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
 
-  // Editor mode: lights, displays, walls, or tubes
-  const [editorMode, setEditorMode] = useState<'lights' | 'displays' | 'walls' | 'tubes'>('lights');
+  // Editor mode: lights, displays, walls, tubes, or doors
+  const [editorMode, setEditorMode] = useState<'lights' | 'displays' | 'walls' | 'tubes' | 'doors'>('lights');
 
   // Load HA entity list for autocomplete in forms (cache-first, else fetch fresh).
   useEffect(() => {
@@ -144,6 +146,10 @@ export default function ConfigEditor() {
   // Pink wireframe meshes shown in the editor when walls tab is active
   const wallEditorMeshesRef = useRef<Mesh[]>([]);
   const wallPreviewInfoRef = useRef<WallPreviewInfo>({ size: { width: 5, height: 0.05, depth: 5 } });
+
+  // Door/window openings state
+  const [doors, setDoors] = useState<DoorConfig[]>([]);
+  const [detectedOpenings, setDetectedOpenings] = useState<DetectedOpening[]>([]);
 
   // Tube state
   const tubeMeshMapRef = useRef<TubeMap>({});
@@ -488,6 +494,7 @@ export default function ConfigEditor() {
         shadowWallsRef.current = config.shadowWalls || [];
         setTubes(config.tubes || []);
         tubesRef.current = config.tubes || [];
+        setDoors(config.doors || []);
 
         // Load model from the same source the dashboard uses (HA or device)
         let modelBlob: Blob | null = null;
@@ -705,6 +712,7 @@ export default function ConfigEditor() {
         utilLayerRef.current.dispose();
         utilLayerRef.current = null;
       }
+      resetDoorPivots();
       ctx.dispose();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1740,12 +1748,34 @@ export default function ConfigEditor() {
   // Save config to server
   const handleSaveConfig = useCallback(async () => {
     try {
-      await updateConfig({ lights, lightGroups, displays, shadowWalls, tubes });
-      showToast(`Saved ${lights.length} lights + ${displays.length} displays + ${shadowWalls.length} walls + ${tubes.length} tubes to server`);
+      await updateConfig({ lights, lightGroups, displays, shadowWalls, tubes, doors });
+      showToast(`Saved ${lights.length} lights + ${displays.length} displays + ${shadowWalls.length} walls + ${tubes.length} tubes + ${doors.length} doors to server`);
     } catch (e) {
       alert('Failed to save config: ' + (e instanceof Error ? e.message : e));
     }
-  }, [lights, displays, shadowWalls, tubes, showToast]);
+  }, [lights, displays, shadowWalls, tubes, doors, showToast]);
+
+  // Detect model openings whenever the doors tab is opened
+  useEffect(() => {
+    if (editorMode !== 'doors') return;
+    const scene = sceneCtxRef.current?.scene;
+    if (scene) setDetectedOpenings(detectOpenings(scene));
+  }, [editorMode]);
+
+  const handleHighlightOpening = useCallback((opening: { meshNames: string[] }) => {
+    const scene = sceneCtxRef.current?.scene;
+    if (!scene) return;
+    const meshes = opening.meshNames
+      .map(n => scene.getMeshByName(n))
+      .filter((m): m is NonNullable<ReturnType<typeof scene.getMeshByName>> => !!m);
+    for (const m of meshes) m.showBoundingBox = true;
+    setTimeout(() => { for (const m of meshes) m.showBoundingBox = false; }, 1800);
+  }, []);
+
+  const handleTestDoor = useCallback((door: DoorConfig, open: boolean) => {
+    const scene = sceneCtxRef.current?.scene;
+    if (scene) applyDoorState(scene, door, open);
+  }, []);
 
   // Load config from server
   const handleLoadConfig = useCallback(async () => {
@@ -1757,6 +1787,7 @@ export default function ConfigEditor() {
       setShadowWalls(config.shadowWalls || []);
       setTubes(config.tubes || []);
       tubesRef.current = config.tubes || [];
+      setDoors(config.doors || []);
       const scene = sceneCtxRef.current?.scene;
       if (scene) {
         rebuildAllMeshes(scene, meshMapRef.current, config.lights || []);
@@ -1819,6 +1850,13 @@ export default function ConfigEditor() {
           >
             Tubes ({tubes.length})
           </button>
+          <button
+            className={`editor-tab${editorMode === 'doors' ? ' active' : ''}`}
+            data-tab="doors"
+            onClick={() => setEditorMode('doors')}
+          >
+            Doors ({doors.length})
+          </button>
         </div>
 
         <div className="light-list">
@@ -1852,13 +1890,22 @@ export default function ConfigEditor() {
               onDelete={handleDeleteWall}
               onDuplicate={handleDuplicateWall}
             />
-          ) : (
+          ) : editorMode === 'tubes' ? (
             <TubeList
               tubes={tubes}
               selectedIdx={tubeEditIdx}
               onSelect={handleEditTube}
               onDelete={handleDeleteTube}
               onDuplicate={handleDuplicateTube}
+            />
+          ) : (
+            <DoorList
+              detected={detectedOpenings}
+              doors={doors}
+              haEntities={haEntities}
+              onChange={setDoors}
+              onHighlight={handleHighlightOpening}
+              onTest={handleTestDoor}
             />
           )}
         </div>
@@ -1876,11 +1923,11 @@ export default function ConfigEditor() {
             <button className="btn btn-primary editor-add-btn" onClick={handleAddWall}>
               + Add Wall
             </button>
-          ) : (
+          ) : editorMode === 'tubes' ? (
             <button className="btn btn-primary editor-add-btn" onClick={handleAddTube}>
               + Add Tube
             </button>
-          )}
+          ) : null}
           <button className="btn btn-ghost" onClick={handleLoadConfig}>
             &uarr; Reload from server
           </button>

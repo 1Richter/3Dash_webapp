@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import type { AppConfig, DisplayConfig, LightConfig, LightGroup, ShadowWallConfig, SidePanelConfig, TubeConfig, ZoneConfig } from '../types';
+import type { AppConfig, DisplayConfig, DoorConfig, LightConfig, LightGroup, ShadowWallConfig, SidePanelConfig, TubeConfig, ZoneConfig } from '../types';
 import { saveModel as dbSaveModel, getModel as dbGetModel, deleteAllModels } from './storageApi';
 import { getSettings, setAllSettings, updateSettings, setSettingsChangedHook, type AppSettings, type SettingsSection } from './settingsStore';
 import { isSimulationActive } from '../contexts/SimulationModeContext';
@@ -64,6 +64,7 @@ export function updateConfig(data: {
   onboarding?: { completed: boolean };
   zones?: ZoneConfig[];
   activeZoneId?: string;
+  doors?: DoorConfig[];
   sharedSettings?: AppConfig['sharedSettings'];
 }): void {
   if (isSimulationActive()) {

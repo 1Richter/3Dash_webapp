@@ -191,6 +191,29 @@ export interface ZoneConfig {
   cameraPose?: ZoneCameraPose | null;
 }
 
+/**
+ * A door or window casement bound to a contact sensor. Mesh names and hinge
+ * pivot come from SweetHome3D's export naming convention, detected in the
+ * editor (src/babylon/doorOpenings.ts) and stored here so the dashboard can
+ * animate without re-detection.
+ */
+export interface DoorConfig {
+  /** Stable id (detection key, e.g. "door-189"). */
+  id: string;
+  /** binary_sensor entity (device_class door/window/opening). */
+  entityId: string;
+  label?: string;
+  kind?: 'door' | 'window';
+  /** Meshes rotating together (leaf + handles). */
+  meshNames: string[];
+  /** Vertical hinge axis (world x/z). */
+  pivot: { x: number; z: number };
+  /** Opening angle in degrees (default 80). */
+  openAngle?: number;
+  /** Flip swing direction. */
+  invert?: boolean;
+}
+
 export interface AppConfig {
   location: {
     latitude: number;
@@ -204,6 +227,8 @@ export interface AppConfig {
   shadowWalls?: ShadowWallConfig[];
   sidePanel?: SidePanelConfig;
   tubes?: TubeConfig[];
+  /** Doors/windows animated by contact sensors. */
+  doors?: DoorConfig[];
   onboarding?: OnboardingState;
   /** Multi-floor / area definitions. Empty or undefined = single-zone mode. */
   zones?: ZoneConfig[];

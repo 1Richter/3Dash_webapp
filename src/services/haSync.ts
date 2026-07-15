@@ -187,10 +187,10 @@ export async function syncOnConnect(local: AppConfig): Promise<SyncResult> {
   // Safety net: a device with no content (fresh /connect or new sign-in)
   // must never overwrite a configured remote, whatever the timestamps say.
   const localEmpty = !local.lights?.length && !local.displays?.length
-    && !local.tubes?.length && !local.zones?.length;
+    && !local.tubes?.length && !local.zones?.length && !local.doors?.length;
   const remoteHasContent = !!(remote && (remote.config.lights?.length
     || remote.config.displays?.length || remote.config.tubes?.length
-    || remote.config.zones?.length));
+    || remote.config.zones?.length || remote.config.doors?.length));
   // Migration: the winning config also seeds the shared store when the pull
   // had to fall back to the legacy per-user store (no-op for non-admins).
   const seedShared = (cfg: AppConfig) => {
