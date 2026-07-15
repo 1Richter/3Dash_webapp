@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import type { AppConfig, DisplayConfig, LightConfig, LightGroup, ShadowWallConfig, SidePanelConfig, TubeConfig, ZoneConfig } from '../types';
 import { saveModel as dbSaveModel, getModel as dbGetModel, deleteAllModels } from './storageApi';
-import { getSettings, setAllSettings, type AppSettings } from './settingsStore';
+import { getSettings, setAllSettings, updateSettings, setSettingsChangedHook, type AppSettings, type SettingsSection } from './settingsStore';
 import { isSimulationActive } from '../contexts/SimulationModeContext';
 
 const CONFIG_KEY = 'config';
@@ -64,6 +64,7 @@ export function updateConfig(data: {
   onboarding?: { completed: boolean };
   zones?: ZoneConfig[];
   activeZoneId?: string;
+  sharedSettings?: AppConfig['sharedSettings'];
 }): void {
   if (isSimulationActive()) {
     // Update in-memory override so the UI reacts, but never persist
@@ -81,6 +82,59 @@ export function updateConfig(data: {
 /** Replace the whole config (used when a newer remote config is pulled from HA). */
 export function replaceConfig(config: AppConfig): void {
   localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+}
+
+/* ── Cross-device settings sync ──
+ * Shareable settings sections (appearance, render, environment) are mirrored
+ * into the synced config so visual preferences follow the user across
+ * devices. Opt-out via sync.shareSettings. Connection, controls and sync
+ * sections never leave the device. */
+
+const SHARED_SETTINGS_SECTIONS = ['appearance', 'render', 'environment'] as const;
+type SharedSection = (typeof SHARED_SETTINGS_SECTIONS)[number];
+
+/** Guards against apply→hook→push feedback when adopting pulled settings. */
+let applyingSharedSettings = false;
+
+/**
+ * Wire the settings→config mirror. Called once at app startup (App.tsx);
+ * kept out of module scope because configApi and settingsStore sit in an
+ * import cycle via SimulationModeContext — a top-level call would hit the
+ * other module's bindings before they are initialized.
+ */
+export function installSettingsSyncHook(): void {
+  setSettingsChangedHook((section: SettingsSection, settings: AppSettings) => {
+    if (applyingSharedSettings || isSimulationActive()) return;
+    if (!(SHARED_SETTINGS_SECTIONS as readonly string[]).includes(section)) return;
+    if (!settings.sync.shareSettings) return;
+    updateConfig({
+      sharedSettings: {
+        appearance: settings.appearance as unknown as Record<string, unknown>,
+        render: settings.render as unknown as Record<string, unknown>,
+        environment: settings.environment as unknown as Record<string, unknown>,
+      },
+    });
+  });
+}
+
+/**
+ * Adopt shared settings from a pulled remote config into the local settings
+ * store. Call before reloading after a pull. No-op when the config carries
+ * no shared settings or the device opted out (sync.shareSettings = false).
+ */
+export function applySharedSettings(config: AppConfig): void {
+  const shared = config.sharedSettings;
+  if (!shared) return;
+  if (!getSettings().sync.shareSettings) return;
+  applyingSharedSettings = true;
+  try {
+    for (const section of SHARED_SETTINGS_SECTIONS) {
+      const patch = shared[section as SharedSection];
+      if (patch) updateSettings(section, patch as Partial<AppSettings[SharedSection]>);
+    }
+  } finally {
+    applyingSharedSettings = false;
+  }
 }
 
 /** Store a GLB model file in IndexedDB. */

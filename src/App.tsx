@@ -1,5 +1,7 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { setConfigChangedHook, installSettingsSyncHook } from './services/configApi';
+import { schedulePush } from './services/haSync';
 import { DemoModeProvider } from './contexts/DemoModeContext';
 import { SimulationModeProvider, useSimulationMode } from './contexts/SimulationModeContext';
 import { CameraControlsProvider } from './contexts/CameraControlsContext';
@@ -45,6 +47,14 @@ function AppRoutes() {
 }
 
 export default function App() {
+  // Push local config edits to HA from anywhere in the app (dashboard,
+  // config editor, settings) — not just while the dashboard is mounted.
+  useEffect(() => {
+    setConfigChangedHook((cfg) => schedulePush(() => cfg));
+    installSettingsSyncHook();
+    return () => setConfigChangedHook(null);
+  }, []);
+
   return (
     <ThemeProvider>
       <DemoModeProvider>

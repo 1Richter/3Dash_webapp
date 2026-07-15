@@ -209,6 +209,17 @@ export interface AppConfig {
   zones?: ZoneConfig[];
   /** Currently selected zone (persists across sessions/devices). */
   activeZoneId?: string;
+  /**
+   * Shareable settings sections mirrored into the synced config so visual
+   * preferences (theme, textures, edge style, …) follow the user across
+   * devices. Connection, controls and sync settings stay per-device.
+   * Loosely typed to keep types/ free of a settingsStore import.
+   */
+  sharedSettings?: {
+    appearance?: Record<string, unknown>;
+    render?: Record<string, unknown>;
+    environment?: Record<string, unknown>;
+  };
   /** Last-modified timestamp (ms epoch) used for cross-device sync conflict resolution. */
   updatedAt?: number;
 }

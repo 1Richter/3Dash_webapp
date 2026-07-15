@@ -366,6 +366,7 @@ export const SIMULATION_SETTINGS: AppSettings = {
     autoSync: false,
     modelSource: 'device',
     modelName: 'model',
+    shareSettings: false,
   },
 };
 

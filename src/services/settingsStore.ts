@@ -69,6 +69,8 @@ export interface SyncSettings {
   modelSource: 'device' | 'ha';
   /** Model file name (without .glb) under config/www/3dash/ when modelSource is 'ha'. */
   modelName: string;
+  /** Mirror appearance/render/environment settings across devices via config sync. */
+  shareSettings: boolean;
 }
 
 /* ── Root interface ── */
@@ -137,6 +139,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     autoSync: false,
     modelSource: 'device',
     modelName: 'model',
+    shareSettings: true,
   },
 };
 
@@ -285,6 +288,16 @@ export function getSetting<K extends SettingsSection>(section: K): AppSettings[K
   return getSettings()[section];
 }
 
+/**
+ * Hook invoked after every persisted settings mutation. Wired by configApi
+ * to mirror shareable sections into the synced config (kept as an injection
+ * point to avoid a settingsStore ↔ configApi import cycle).
+ */
+let settingsChangedHook: ((section: SettingsSection, settings: AppSettings) => void) | null = null;
+export function setSettingsChangedHook(fn: ((section: SettingsSection, settings: AppSettings) => void) | null): void {
+  settingsChangedHook = fn;
+}
+
 /** Update one or more keys within a specific section. */
 export function updateSettings<K extends SettingsSection>(
   section: K,
@@ -300,6 +313,7 @@ export function updateSettings<K extends SettingsSection>(
   const current = getSettings();
   current[section] = { ...current[section], ...patch };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+  settingsChangedHook?.(section, current);
 }
 
 /** Replace all settings at once (used by backup import). */

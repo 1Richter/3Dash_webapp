@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { buildWsUrl, type HAConnectionStatus } from '../services/haWebSocket';
 import type { HASettings, ZoneCameraPose, ZoneConfig } from '../types';
-import { getConfig, resetConfig, updateConfig, exportBackup, importBackup, replaceConfig } from '../services/configApi';
+import { getConfig, resetConfig, updateConfig, exportBackup, importBackup, replaceConfig, applySharedSettings } from '../services/configApi';
 import { clearSettings, getSetting, getSettings, updateSettings } from '../services/settingsStore';
 import { pushConfigToHA, pullRemoteConfig } from '../services/haSync';
 import { showToast } from './Toast';
@@ -512,6 +512,17 @@ export default function SettingsModal({
                       Off
                     </button>
                   </div>
+                  <label className="settings-checkbox" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={syncSettings.shareSettings}
+                      onChange={(e) => {
+                        updateSettings('sync', { shareSettings: e.target.checked });
+                        setSyncSettings((s) => ({ ...s, shareSettings: e.target.checked }));
+                      }}
+                    />
+                    Share appearance &amp; render settings across devices
+                  </label>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <button
                       className="settings-action-btn"
@@ -541,6 +552,7 @@ export default function SettingsModal({
                             showToast('info', 'No config stored on Home Assistant yet');
                           } else {
                             replaceConfig(remote.config);
+                            applySharedSettings(remote.config);
                             showToast('success', 'Config pulled \u2014 reloading\u2026');
                             setTimeout(() => window.location.reload(), 800);
                           }

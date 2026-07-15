@@ -19,8 +19,8 @@ import {
   setDisplayAnimation,
   type DisplayMeshMap,
 } from '../../babylon/DisplayMeshFactory';
-import { getConfig, updateConfig, getModelBlob, replaceConfig, setConfigChangedHook, hasConfig } from '../../services/configApi';
-import { schedulePush, syncOnConnect, fetchModelFromHA, pullRemoteConfig } from '../../services/haSync';
+import { getConfig, updateConfig, getModelBlob, replaceConfig, applySharedSettings, hasConfig } from '../../services/configApi';
+import { syncOnConnect, fetchModelFromHA, pullRemoteConfig } from '../../services/haSync';
 import { getCachedUser, refreshCurrentUser, refreshUserList, canAccessLight, hasRestrictedLights } from '../../services/haUser';
 import { hasOAuth, getOAuthAccessToken } from '../../services/haAuth';
 import { hasEmbeddedAuth, isEmbedded, getEmbeddedAccessToken } from '../../services/embeddedAuth';
@@ -164,12 +164,9 @@ export default function Dashboard() {
     if (!simulationMode) updateConfig({ activeZoneId: zone?.id ?? undefined });
   }, [applyZoneVisibility, simulationMode]);
 
-  /* ── HA config sync (Issue #8): push local edits, pull newer remote ── */
-  useEffect(() => {
-    if (simulationMode || demoMode) return;
-    setConfigChangedHook((cfg) => schedulePush(() => cfg));
-    return () => setConfigChangedHook(null);
-  }, [simulationMode, demoMode]);
+  /* ── HA config sync (Issue #8): push local edits, pull newer remote ──
+   * The push hook itself is wired app-wide in App.tsx so edits made outside
+   * the dashboard (config editor, settings) also schedule a push. */
 
   const syncAttemptedRef = useRef(false);
 
@@ -185,6 +182,7 @@ export default function Dashboard() {
         const localTs = getConfig().updatedAt ?? 0;
         if (remote && remote.updatedAt > localTs) {
           replaceConfig(remote.config);
+          applySharedSettings(remote.config);
           showToast('info', 'Config updated on another device — reloading…');
           setTimeout(() => window.location.reload(), 1200);
         }
@@ -1176,6 +1174,7 @@ export default function Dashboard() {
             syncOnConnect(local).then((res) => {
               if (res.action === 'pulled' && res.remoteConfig) {
                 replaceConfig(res.remoteConfig);
+                applySharedSettings(res.remoteConfig);
                 showToast('info', 'Newer config found on Home Assistant — applying…');
                 setTimeout(() => window.location.reload(), 1200);
               } else if (res.action === 'pushed') {
