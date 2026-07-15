@@ -21,6 +21,7 @@ import {
 } from '../../babylon/DisplayMeshFactory';
 import { getConfig, updateConfig, getModelBlob, replaceConfig, setConfigChangedHook, hasConfig } from '../../services/configApi';
 import { schedulePush, syncOnConnect, fetchModelFromHA, pullRemoteConfig } from '../../services/haSync';
+import { getCachedUser, refreshCurrentUser, refreshUserList, canAccessLight, hasRestrictedLights } from '../../services/haUser';
 import { hasOAuth, getOAuthAccessToken } from '../../services/haAuth';
 import { hasEmbeddedAuth, isEmbedded, getEmbeddedAccessToken } from '../../services/embeddedAuth';
 import ToastHost, { showToast } from '../../components/Toast';
@@ -749,7 +750,13 @@ export default function Dashboard() {
         try {
           const config = await getConfig();
           if (disposed) return;
-          configRef.current = config;
+          // Scene copy only: hide lights this HA user may not access. The
+          // stored config stays complete so sync pushes never drop them.
+          const user = getCachedUser();
+          configRef.current = { ...config, lights: config.lights.filter((l) => canAccessLight(l, user)) };
+          // Debug/support hook: which lights this session actually renders
+          (window as unknown as { __3dashLights?: string[] }).__3dashLights =
+            configRef.current.lights.map((l) => l.entityId);
           setSidePanelConfig(config.sidePanel);
           if (config.location.northOffset !== undefined) setNorthOffset(config.location.northOffset);
         } catch (e) {
@@ -1154,7 +1161,17 @@ export default function Dashboard() {
         // First successful connection → reconcile config with HA user-data store
         if (status === 'connected' && !simulationMode && !demoMode && !syncAttemptedRef.current) {
           syncAttemptedRef.current = true;
-          const local = configRef.current;
+          // Identify the signed-in HA user; rebuild the scene when identity
+          // changed and per-light access rules are in play. Admins also
+          // refresh the user directory for the access picker in the editor.
+          refreshCurrentUser().then((res) => {
+            if (!res) return;
+            if (res.user.isAdmin) refreshUserList().catch(() => {});
+            if (res.changed && hasRestrictedLights(getConfig().lights)) {
+              window.location.reload();
+            }
+          }).catch((e) => console.warn('[haUser] current_user failed:', e));
+          const local = getConfig();
           if (local) {
             syncOnConnect(local).then((res) => {
               if (res.action === 'pulled' && res.remoteConfig) {

@@ -60,6 +60,15 @@ export interface LightConfig {
   doubleTapEntityId?: string;
   /** Hide the bulb mesh entirely — the light stays clickable and still illuminates the room. */
   hidden?: boolean;
+  /** Who may see and control this light. Undefined = everyone. */
+  access?: LightAccess;
+}
+
+export interface LightAccess {
+  /** Admins always have access regardless of mode. */
+  mode: 'everyone' | 'admins' | 'users';
+  /** HA user ids allowed when mode === 'users'. */
+  userIds?: string[];
 }
 
 export interface LightGroup {

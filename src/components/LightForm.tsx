@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
-import type { LightConfig, LightType, LightPosition, LightPart, HitboxConfig } from '../types';
+import type { LightConfig, LightType, LightPosition, LightPart, HitboxConfig, LightAccess } from '../types';
 import { FormPanel, AccordionSection } from './FormPanel';
 import EntityPicker, { type HAEntityOption } from './EntityPicker';
+import { getCachedUserList } from '../services/haUser';
 
 interface PartState {
   shape: 'sphere' | 'cube';
@@ -103,6 +104,10 @@ const LightForm = forwardRef<LightFormHandle, Props>(function LightForm({
   const [brightness, setBrightness] = useState(1);
   const [doubleTapEntityId, setDoubleTapEntityId] = useState('');
   const [hidden, setHidden] = useState(false);
+  const [accessMode, setAccessMode] = useState<LightAccess['mode']>('everyone');
+  const [accessUserIds, setAccessUserIds] = useState<string[]>([]);
+  // HA user directory, cached by the dashboard on connect (admin sessions)
+  const [userOptions] = useState(() => getCachedUserList());
 
   // Multi-part state
   const [multiPart, setMultiPart] = useState(false);
@@ -154,6 +159,8 @@ const LightForm = forwardRef<LightFormHandle, Props>(function LightForm({
       setBrightness(editLight.brightness ?? 1);
       setDoubleTapEntityId(editLight.doubleTapEntityId ?? '');
       setHidden(!!editLight.hidden);
+      setAccessMode(editLight.access?.mode ?? 'everyone');
+      setAccessUserIds(editLight.access?.userIds ?? []);
       const hasParts = editLight.parts && editLight.parts.length > 0;
       setMultiPart(!!hasParts);
       setParts(hasParts ? editLight.parts!.map(partFromConfig) : []);
@@ -179,6 +186,8 @@ const LightForm = forwardRef<LightFormHandle, Props>(function LightForm({
       setBrightness(1);
       setDoubleTapEntityId('');
       setHidden(false);
+      setAccessMode('everyone');
+      setAccessUserIds([]);
       setMultiPart(false);
       setParts([]);
       setUseCustomHitbox(false);
@@ -249,6 +258,9 @@ const LightForm = forwardRef<LightFormHandle, Props>(function LightForm({
       hitbox,
       doubleTapEntityId: doubleTapEntityId.trim() || undefined,
       hidden: hidden || undefined,
+      access: accessMode === 'everyone'
+        ? undefined
+        : { mode: accessMode, userIds: accessMode === 'users' ? accessUserIds : undefined },
     };
 
     if (multiPart && parts.length > 0) {
@@ -265,7 +277,7 @@ const LightForm = forwardRef<LightFormHandle, Props>(function LightForm({
     }
 
     onSave(cfg);
-  }, [entityId, label, type, shape, diameter, width, height, depth, position, warmth, brightness, doubleTapEntityId, hidden, onSave, useCustomHitbox, multiPart, parts, hbShape, hbDiameter, hbWidth, hbHeight, hbDepth, hbPosX, hbPosY, hbPosZ]);
+  }, [entityId, label, type, shape, diameter, width, height, depth, position, warmth, brightness, doubleTapEntityId, hidden, accessMode, accessUserIds, onSave, useCustomHitbox, multiPart, parts, hbShape, hbDiameter, hbWidth, hbHeight, hbDepth, hbPosX, hbPosY, hbPosZ]);
 
   const handlePosChange = useCallback(
     (axis: 'x' | 'y' | 'z', value: number) => {
@@ -389,6 +401,45 @@ const LightForm = forwardRef<LightFormHandle, Props>(function LightForm({
             Toggle a secondary entity on double-tap
           </span>
         </div>
+      </AccordionSection>
+
+      <AccordionSection title="Access">
+        <div className="field-group">
+          <label className="field-label">Visible to</label>
+          <select
+            className="field-input"
+            value={accessMode}
+            onChange={(e) => setAccessMode(e.target.value as LightAccess['mode'])}
+          >
+            <option value="everyone">Everyone</option>
+            <option value="admins">Admins only</option>
+            <option value="users">Selected users</option>
+          </select>
+        </div>
+        {accessMode === 'users' && (
+          userOptions.length === 0 ? (
+            <div className="field-group">
+              <span className="field-label">
+                No user list cached yet — open the dashboard once as an admin, then come back.
+              </span>
+            </div>
+          ) : (
+            <div className="field-group">
+              {userOptions.map((u) => (
+                <label key={u.id} className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={u.isAdmin || accessUserIds.includes(u.id)}
+                    disabled={u.isAdmin}
+                    onChange={(e) => setAccessUserIds((prev) =>
+                      e.target.checked ? [...prev, u.id] : prev.filter((id) => id !== u.id))}
+                  />
+                  {u.name}{u.isAdmin ? ' (admin — always has access)' : ''}
+                </label>
+              ))}
+            </div>
+          )
+        )}
       </AccordionSection>
 
       <AccordionSection title="Shape">
