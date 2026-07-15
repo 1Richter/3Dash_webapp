@@ -7,3 +7,4 @@ dist-server/
 CLAUDE.md
 server/certs/
 .local-model/
+HANDOFF.md
