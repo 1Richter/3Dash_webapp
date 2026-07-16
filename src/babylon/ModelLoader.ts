@@ -75,7 +75,8 @@ export async function loadModel(
     },
     blobUrl ? '.glb' : undefined, // hint Babylon to use the glTF loader for blob URLs
   );
-  console.log(`[ModelLoader] loaded in ${(performance.now() - t0).toFixed(0)}ms`);
+  const tImport = performance.now();
+  console.log(`[ModelLoader] import ${(tImport - t0).toFixed(0)}ms`);
 
   // Calculate bounding box and collect solid meshes
   let min = new Vector3(Infinity, Infinity, Infinity);
@@ -129,11 +130,13 @@ export async function loadModel(
     .forEach((l) => l.setEnabled(false));
 
   // Apply white cartoon style or keep original textures depending on user setting.
+  const tStyle = performance.now();
   applyRenderStyle(scene, solidMeshes, {
     showTextures: options?.showTextures ?? false,
     sketchColor: options?.sketchColor ?? '#ffffff',
     sketchSpecular: options?.sketchSpecular ?? 0.1,
   });
+  console.log(`[ModelLoader] style+edges ${(performance.now() - tStyle).toFixed(0)}ms (${solidMeshes.length} meshes)`);
 
   const shadowCasters: AbstractMesh[] = [...solidMeshes];
 

@@ -781,9 +781,13 @@ export default function Dashboard() {
         }
       } else {
         const syncSettings = getSetting('sync');
+        const tFetch = performance.now();
         if (syncSettings.modelSource === 'ha') {
-          // Model hosted in HA's config/www/3dash — ETag-cached in IndexedDB
-          modelBlob = await fetchModelFromHA(syncSettings.modelName);
+          // Model hosted in HA's config/www/3dash — served instantly from the
+          // IndexedDB cache while an ETag revalidation runs in the background
+          modelBlob = await fetchModelFromHA(syncSettings.modelName, () => {
+            showToast('info', 'Model updated on Home Assistant — reload to apply');
+          });
           if (!modelBlob) {
             // Fall back to the locally uploaded model
             modelBlob = await getModelBlob();
@@ -797,6 +801,7 @@ export default function Dashboard() {
         navigate('/onboarding');
         return;
       }
+      console.log(`[Dashboard] model blob ready in ${(performance.now() - tFetch).toFixed(0)}ms (${modelBlob.size} bytes)`);
       try {
         const renderAtLoad = getSetting('render');
         const showTexturesAtLoad = renderAtLoad.showTextures;

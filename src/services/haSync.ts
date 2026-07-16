@@ -240,33 +240,62 @@ export function haModelUrl(name = 'model'): string {
  * HA serves /local/ with a 31-day Cache-Control but honours ETag revalidation,
  * so we bypass the HTTP cache and do our own conditional fetch.
  *
- * Returns the blob, or the cached copy when HA is unreachable (offline-first),
- * or null when neither exists.
+ * Stale-while-revalidate: when a cached copy exists it is returned
+ * immediately and the conditional GET runs in the background — startup never
+ * waits on the network (an unreachable HA host would otherwise stall the
+ * load for the full TCP timeout, ~30 s on mobile). When the background
+ * revalidation finds a newer model, `onUpdated` is invoked with the fresh
+ * blob so the caller can prompt for a reload.
+ *
+ * Without a cached copy the fetch runs in the foreground with a hard
+ * timeout. Returns null when neither network nor cache can provide a model.
  */
-export async function fetchModelFromHA(name = 'model'): Promise<Blob | null> {
+export async function fetchModelFromHA(
+  name = 'model',
+  onUpdated?: (blob: Blob) => void,
+): Promise<Blob | null> {
   const url = haModelUrl(name);
   const cacheKey = `ha:${name}`;
   const cached = await getModel(cacheKey);
   const cachedEtag = cached ? await getMeta(cacheKey) : null;
 
-  try {
-    const headers: Record<string, string> = {};
-    if (cachedEtag) headers['If-None-Match'] = cachedEtag;
-    const resp = await fetch(url, { headers, cache: 'no-cache' });
+  const revalidate = async (timeoutMs: number): Promise<Blob | null> => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const headers: Record<string, string> = {};
+      if (cachedEtag) headers['If-None-Match'] = cachedEtag;
+      const resp = await fetch(url, { headers, cache: 'no-cache', signal: ctrl.signal });
 
-    if (resp.status === 304 && cached) return cached;
-    if (!resp.ok) {
-      console.warn(`[haSync] model fetch ${resp.status} for ${url}`);
-      return cached; // fall back to cache (e.g. 404 after file removed)
+      if (resp.status === 304 && cached) return cached;
+      if (!resp.ok) {
+        console.warn(`[haSync] model fetch ${resp.status} for ${url}`);
+        return cached; // fall back to cache (e.g. 404 after file removed)
+      }
+      const blob = await resp.blob();
+      await saveModel(blob, cacheKey);
+      const etag = resp.headers.get('ETag');
+      if (etag) await saveMeta(cacheKey, etag);
+      return blob;
+    } catch (e) {
+      // Network / CORS failure or timeout → offline-first fallback
+      console.warn('[haSync] model fetch failed, using cache:', e);
+      return cached;
+    } finally {
+      clearTimeout(timer);
     }
-    const blob = await resp.blob();
-    await saveModel(blob, cacheKey);
-    const etag = resp.headers.get('ETag');
-    if (etag) await saveMeta(cacheKey, etag);
-    return blob;
-  } catch (e) {
-    // Network / CORS failure → offline-first fallback
-    console.warn('[haSync] model fetch failed, using cache:', e);
+  };
+
+  if (cached) {
+    void revalidate(30_000).then((blob) => {
+      // revalidate returns `cached` itself on 304 / failure — only a truly
+      // new blob triggers the update callback
+      if (blob && blob !== cached) {
+        console.log('[haSync] model updated on HA — new copy cached');
+        onUpdated?.(blob);
+      }
+    });
     return cached;
   }
+  return revalidate(15_000);
 }
