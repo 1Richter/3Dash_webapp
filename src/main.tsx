@@ -4,6 +4,7 @@ import { HashRouter } from 'react-router-dom';
 import { registerSW } from 'virtual:pwa-register';
 import { completeOAuthLogin } from './services/haAuth';
 import { initEmbeddedAuth, configureFromEmbeddedAuth } from './services/embeddedAuth';
+import { reloadWithReason, markBoot } from './services/bootTrace';
 import App from './App';
 import './App.css';
 
@@ -11,6 +12,7 @@ import './App.css';
 // 1. Embedded in the HA custom panel → adopt the HA session's token.
 // 2. URL carries an OAuth code from Home Assistant → finish that login.
 (async () => {
+  markBoot('js');
   try {
     if (await initEmbeddedAuth()) configureFromEmbeddedAuth();
   } catch (e) {
@@ -23,6 +25,7 @@ import './App.css';
   }
 })()
   .finally(() => {
+    markBoot('auth');
     createRoot(document.getElementById('root')!).render(
       <StrictMode>
         <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -45,7 +48,7 @@ if (servedFromHA) {
     // Detach this page from the stale worker exactly once
     if (navigator.serviceWorker.controller && !sessionStorage.getItem('3dash_sw_purged')) {
       sessionStorage.setItem('3dash_sw_purged', '1');
-      window.location.reload();
+      reloadWithReason('sw-purge', 0);
     }
   });
 } else {

@@ -46,6 +46,13 @@ rm -rf "$DEST/app"/*
 cp -r dist/* "$DEST/app/"
 cp ha/panel.js "$DEST/panel.js"
 
+# Precompressed siblings: HA's aiohttp serves file.js.gz as Content-Encoding
+# gzip when present. Vital on phones — the HA companion WebView won't cache
+# multi-MB responses, so the 5.6MB Babylon chunk was re-downloaded on every
+# app start; the ~1.2MB gzip variant transfers fast and caches.
+find "$DEST/app" -type f \( -name '*.js' -o -name '*.css' -o -name '*.html' -o -name '*.svg' \) \
+  -exec gzip -k9f {} +
+
 if [ -n "$HA_URL" ]; then
   printf '{"haUrl":"%s"}' "$HA_URL" > "$DEST/app/app-config.json"
 fi

@@ -75,6 +75,11 @@ export function updateConfig(data: {
     return;
   }
   const current = getConfig();
+  // No-op guard: a write that changes nothing must not bump updatedAt —
+  // every bump makes all other devices pull + reload on their next boot.
+  const changed = (Object.keys(data) as Array<keyof typeof data>)
+    .some((k) => JSON.stringify(current[k]) !== JSON.stringify(data[k]));
+  if (!changed) return;
   const merged: AppConfig = { ...current, ...data, updatedAt: Date.now() };
   localStorage.setItem(CONFIG_KEY, JSON.stringify(merged));
   configChangedHook?.(merged);

@@ -7,6 +7,7 @@ import {
   onEmbeddedAuth,
   configureFromEmbeddedAuth,
 } from '../../services/embeddedAuth';
+import { reloadWithReason } from '../../services/bootTrace';
 
 /**
  * Landing page for unconfigured devices.
@@ -43,7 +44,7 @@ export default function AutoConnect() {
       // Land on the dashboard after the reload — reloading at #/welcome
       // would re-enter this page and loop.
       window.location.hash = '#/';
-      window.location.reload();
+      reloadWithReason('embedded-auth-adopt', 0);
     };
     if (hasEmbeddedAuth()) {
       adopt();

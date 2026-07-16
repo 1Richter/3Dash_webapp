@@ -25,6 +25,7 @@ import { getCachedUser, refreshCurrentUser, refreshUserList, canAccessLight, has
 import { hasOAuth, getOAuthAccessToken } from '../../services/haAuth';
 import { hasEmbeddedAuth, isEmbedded, getEmbeddedAccessToken } from '../../services/embeddedAuth';
 import ToastHost, { showToast } from '../../components/Toast';
+import { reloadWithReason, consumeReloadReason, markBoot, bootSummary } from '../../services/bootTrace';
 import ZoneSwitcher from '../../components/ZoneSwitcher';
 import { getEntityCache, setEntityCache } from '../../services/entityCache';
 import type { HAEntityOption } from '../../components/EntityPicker';
@@ -185,7 +186,7 @@ export default function Dashboard() {
           replaceConfig(remote.config);
           applySharedSettings(remote.config);
           showToast('info', 'Config updated on another device — reloading…');
-          setTimeout(() => window.location.reload(), 1200);
+          reloadWithReason(`config-pull-periodic (remote ${remote.updatedAt} > local ${localTs})`);
         }
       } catch { /* offline or HA restarting — try again next tick */ }
     }, 5 * 60 * 1000);
@@ -802,6 +803,7 @@ export default function Dashboard() {
         return;
       }
       console.log(`[Dashboard] model blob ready in ${(performance.now() - tFetch).toFixed(0)}ms (${modelBlob.size} bytes)`);
+      markBoot('blob');
       try {
         const renderAtLoad = getSetting('render');
         const showTexturesAtLoad = renderAtLoad.showTextures;
@@ -900,6 +902,16 @@ export default function Dashboard() {
 
         setModelStatus('ready');
         setModelStatusColor('var(--green)');
+
+        // Boot diagnostics: visible on devices without a console (phone
+        // WebViews). Shows where boot time went and why a reload happened.
+        {
+          markBoot('scene');
+          const reloadReason = consumeReloadReason();
+          const summary = reloadReason ? `${bootSummary()} — reload cause: ${reloadReason}` : bootSummary();
+          console.log(`[BootTrace] ${summary}`);
+          showToast('info', summary, 12_000);
+        }
 
         // Create invisible shadow wall meshes from config
         const wallMeshes = createShadowWalls(ctx.scene, configRef.current?.shadowWalls || []);
@@ -1179,7 +1191,7 @@ export default function Dashboard() {
             if (!res) return;
             if (res.user.isAdmin) refreshUserList().catch(() => {});
             if (res.changed && hasRestrictedLights(getConfig().lights)) {
-              window.location.reload();
+              reloadWithReason('ha-user-changed', 0);
             }
           }).catch((e) => console.warn('[haUser] current_user failed:', e));
           const local = getConfig();
@@ -1189,7 +1201,7 @@ export default function Dashboard() {
                 replaceConfig(res.remoteConfig);
                 applySharedSettings(res.remoteConfig);
                 showToast('info', 'Newer config found on Home Assistant — applying…');
-                setTimeout(() => window.location.reload(), 1200);
+                reloadWithReason(`config-pull-initial (remote ${res.remoteConfig.updatedAt} > local ${local.updatedAt ?? 0})`);
               } else if (res.action === 'pushed') {
                 showToast('success', 'Config synced to Home Assistant');
               }

@@ -41,6 +41,11 @@ export default defineConfig(({ mode }) => {
   build: {
     rollupOptions: {
       output: {
+        // Note: do NOT split @babylonjs/core into multiple chunks — its modules
+        // are circularly interdependent and cross-chunk cycles crash at load
+        // ("Cannot access X before initialization"). Large-file caching is
+        // instead handled by serving precompressed .gz siblings (HA's aiohttp
+        // picks them up), which keeps the wire size WebView-cacheable.
         manualChunks: {
           'vendor-babylon': [
             '@babylonjs/core',
