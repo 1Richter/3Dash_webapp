@@ -768,6 +768,7 @@ export default function Dashboard() {
 
       // Load 3D model
       let modelBlob: Blob | null;
+      const tFetch = performance.now();
       if (simulationMode) {
         try {
           const resp = await fetch(SIMULATION_MODEL_URL);
@@ -781,7 +782,6 @@ export default function Dashboard() {
         }
       } else {
         const syncSettings = getSetting('sync');
-        const tFetch = performance.now();
         if (syncSettings.modelSource === 'ha') {
           // Model hosted in HA's config/www/3dash — served instantly from the
           // IndexedDB cache while an ETag revalidation runs in the background
