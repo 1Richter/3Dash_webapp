@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "optimize-model": "gltfpack -cc -vpf -kn -km -ke"
+    "optimize-model": "gltfpack -cc -vpf -kn -km -ke",
+    "convert-model": "bash scripts/obj-to-glb.sh"
   },
   "dependencies": {
     "@babylonjs/core": "^7.37.2",
