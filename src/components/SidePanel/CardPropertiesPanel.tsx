@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { SidePanelCard } from '../../types';
+import type { SidePanelCard, ZoneConfig } from '../../types';
 import EntityPicker, { type HAEntityOption } from '../EntityPicker';
 import './CardPropertiesPanel.css';
 
@@ -10,6 +10,8 @@ interface Props {
   /** Called on every field change in edit mode so the grid updates live. */
   onPreview?: (card: SidePanelCard) => void;
   haEntities?: HAEntityOption[];
+  /** When zones exist, lets the card be bound to one so it only shows on that floor. */
+  zones?: ZoneConfig[];
 }
 
 type CardType = 'script' | 'indicator' | 'graph';
@@ -34,6 +36,7 @@ function buildCard(
   h: string,
   longPressEntityId: string,
   doublePressEntityId: string,
+  zoneId: string,
 ): SidePanelCard {
   const layout = {
     x,
@@ -41,11 +44,12 @@ function buildCard(
     w: Math.max(1, parseInt(w) || 2),
     h: Math.max(1, parseInt(h) || 1),
   };
+  const zone = zoneId || undefined;
 
   switch (type) {
     case 'script':
       return {
-        id, type: 'script', title: title.trim(), showTitle, entityId: entityId.trim(), icon: icon || undefined, layout,
+        id, type: 'script', title: title.trim(), showTitle, entityId: entityId.trim(), icon: icon || undefined, layout, zoneId: zone,
         longPressEntityId: longPressEntityId.trim() || undefined,
         doublePressEntityId: doublePressEntityId.trim() || undefined,
       };
@@ -56,19 +60,19 @@ function buildCard(
         unit: unit || undefined,
         precision: precision !== '' ? Number(precision) : undefined,
         climateEntityId: climateEntityId || undefined,
-        layout,
+        layout, zoneId: zone,
       };
     case 'graph':
       return {
         id, type: 'graph', title: title.trim(), showTitle, entityId: entityId.trim(),
         period: period || '24h',
         refreshInterval: refreshInterval !== '' ? Number(refreshInterval) : undefined,
-        layout,
+        layout, zoneId: zone,
       };
   }
 }
 
-export default function CardPropertiesPanel({ card, onSave, onCancel, onPreview, haEntities = [] }: Props) {
+export default function CardPropertiesPanel({ card, onSave, onCancel, onPreview, haEntities = [], zones = [] }: Props) {
   const isEdit = !!card;
 
   const [type, setType] = useState<CardType>(card?.type ?? 'indicator');
@@ -101,6 +105,7 @@ export default function CardPropertiesPanel({ card, onSave, onCancel, onPreview,
   );
   const [w, setW] = useState(String(card?.layout.w ?? 2));
   const [h, setH] = useState(String(card?.layout.h ?? 1));
+  const [zoneId, setZoneId] = useState(card?.zoneId ?? '');
 
   // Sync layout fields when card prop changes (e.g. resize via grid handle)
   useEffect(() => {
@@ -126,8 +131,8 @@ export default function CardPropertiesPanel({ card, onSave, onCancel, onPreview,
   // Push live preview to parent on every field change (edit mode only)
   const emitPreview = useCallback(() => {
     if (!isEdit || !onPreview || !card) return;
-    onPreview(buildCard(card.id, type, title, showTitle, entityId, icon, unit, precision, climateEntityId, period, refreshInterval, card.layout.x, card.layout.y, w, h, longPressEntityId, doublePressEntityId));
-  }, [isEdit, onPreview, card, type, title, showTitle, entityId, icon, unit, precision, climateEntityId, period, refreshInterval, w, h, longPressEntityId, doublePressEntityId]);
+    onPreview(buildCard(card.id, type, title, showTitle, entityId, icon, unit, precision, climateEntityId, period, refreshInterval, card.layout.x, card.layout.y, w, h, longPressEntityId, doublePressEntityId, zoneId));
+  }, [isEdit, onPreview, card, type, title, showTitle, entityId, icon, unit, precision, climateEntityId, period, refreshInterval, w, h, longPressEntityId, doublePressEntityId, zoneId]);
 
   useEffect(() => {
     emitPreview();
@@ -138,7 +143,7 @@ export default function CardPropertiesPanel({ card, onSave, onCancel, onPreview,
   const handleSave = () => {
     if (!canSave) return;
     const id = card?.id ?? `card_${Date.now()}`;
-    const result = buildCard(id, type, title, showTitle, entityId, icon, unit, precision, climateEntityId, period, refreshInterval, card?.layout.x ?? 0, card?.layout.y ?? Infinity, w, h, longPressEntityId, doublePressEntityId);
+    const result = buildCard(id, type, title, showTitle, entityId, icon, unit, precision, climateEntityId, period, refreshInterval, card?.layout.x ?? 0, card?.layout.y ?? Infinity, w, h, longPressEntityId, doublePressEntityId, zoneId);
     onSave(result);
   };
 
@@ -237,6 +242,16 @@ export default function CardPropertiesPanel({ card, onSave, onCancel, onPreview,
                 <label>Refresh (s)</label>
                 <input type="number" min="30" value={refreshInterval} onChange={e => setRefreshInterval(e.target.value)} placeholder="300" />
               </div>
+            </div>
+          )}
+
+          {zones.length > 0 && (
+            <div className="card-props-field">
+              <label>Floor / Zone</label>
+              <select value={zoneId} onChange={e => setZoneId(e.target.value)}>
+                <option value="">All floors</option>
+                {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+              </select>
             </div>
           )}
 

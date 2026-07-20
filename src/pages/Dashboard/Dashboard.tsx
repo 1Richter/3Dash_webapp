@@ -20,6 +20,7 @@ import {
   type DisplayMeshMap,
 } from '../../babylon/DisplayMeshFactory';
 import { getConfig, updateConfig, getModelBlob, replaceConfig, applySharedSettings, hasConfig } from '../../services/configApi';
+import { getModel as getZoneModel } from '../../services/storageApi';
 import { syncOnConnect, fetchModelFromHA, pullRemoteConfig } from '../../services/haSync';
 import { getCachedUser, refreshCurrentUser, refreshUserList, canAccessLight, hasRestrictedLights } from '../../services/haUser';
 import { hasOAuth, getOAuthAccessToken } from '../../services/haAuth';
@@ -130,6 +131,10 @@ export default function Dashboard() {
   /* ── Zones / floors ── */
   const [zones, setZones] = useState<ZoneConfig[]>([]);
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
+  // Separate-model zones (ZoneConfig.modelKey): meshes loaded lazily, kept
+  // around after first load so switching floors back and forth is instant.
+  const zoneModelMeshesRef = useRef<Record<string, AbstractMesh[]>>({});
+  const zoneModelLoadingRef = useRef<Set<string>>(new Set());
 
   /** Show/hide model meshes according to a zone's mesh-name filter. */
   const applyZoneVisibility = useCallback((zone: ZoneConfig | null) => {
@@ -147,14 +152,7 @@ export default function Dashboard() {
     }
   }, []);
 
-  const handleZoneSelect = useCallback((zoneId: string | null) => {
-    const config = configRef.current;
-    if (!config) return;
-    const zone = config.zones?.find((z) => z.id === zoneId) ?? null;
-    setActiveZoneId(zone?.id ?? null);
-    applyZoneVisibility(zone);
-
-    // Fly to the zone's camera pose when one is defined
+  const flyToZonePose = useCallback((zone: ZoneConfig | null) => {
     const camera = sceneCtxRef.current?.camera;
     if (camera && zone?.cameraPose) {
       const p = zone.cameraPose;
@@ -163,8 +161,83 @@ export default function Dashboard() {
       camera.beta = p.beta;
       camera.radius = p.radius;
     }
+  }, []);
+
+  /**
+   * Zones with their own model (ZoneConfig.modelKey) fully replace the main
+   * model's visibility instead of mesh-filtering it: the main model and every
+   * other separate-model zone are hidden, and this zone's meshes are loaded
+   * (once, then cached) and shown. Zones without modelKey keep the cheaper
+   * mesh-filter behavior on the shared model.
+   */
+  const showZoneModel = useCallback(async (zone: ZoneConfig) => {
+    const scene = sceneCtxRef.current?.scene;
+    if (!scene || !zone.modelKey) return;
+    const key = zone.modelKey;
+
+    for (const mesh of modelMeshesRef.current) mesh.setEnabled(false);
+    for (const [otherKey, meshes] of Object.entries(zoneModelMeshesRef.current)) {
+      if (otherKey !== key) for (const mesh of meshes) mesh.setEnabled(false);
+    }
+
+    const cached = zoneModelMeshesRef.current[key];
+    if (cached) {
+      for (const mesh of cached) mesh.setEnabled(true);
+      return;
+    }
+    if (zoneModelLoadingRef.current.has(key)) return;
+    zoneModelLoadingRef.current.add(key);
+    try {
+      const blob = await getZoneModel(key);
+      if (!blob) {
+        showToast('warning', `No model uploaded for "${zone.name}" yet — add one in Settings → Zones`);
+        return;
+      }
+      if (activeZoneIdRef.current !== zone.id || sceneCtxRef.current?.scene !== scene) return;
+      const render = getSetting('render');
+      const result = await loadModel(scene, blob, undefined, {
+        showTextures: render.showTextures,
+        sketchColor: render.sketchColor,
+        sketchSpecular: render.sketchSpecular,
+      });
+      const meshes = result.meshes.filter((m) => m.getTotalVertices?.() > 0);
+      zoneModelMeshesRef.current[key] = meshes;
+      if (activeZoneIdRef.current === zone.id) {
+        for (const mesh of meshes) mesh.setEnabled(true);
+      } else {
+        for (const mesh of meshes) mesh.setEnabled(false);
+      }
+    } catch (e) {
+      console.error(`[Zones] Failed to load model for zone "${zone.name}":`, e);
+      showToast('error', `Could not load the model for "${zone.name}"`);
+    } finally {
+      zoneModelLoadingRef.current.delete(key);
+    }
+  }, []);
+
+  const activeZoneIdRef = useRef<string | null>(null);
+  useEffect(() => { activeZoneIdRef.current = activeZoneId; }, [activeZoneId]);
+
+  const handleZoneSelect = useCallback((zoneId: string | null) => {
+    const config = configRef.current;
+    if (!config) return;
+    const zone = config.zones?.find((z) => z.id === zoneId) ?? null;
+    setActiveZoneId(zone?.id ?? null);
+    activeZoneIdRef.current = zone?.id ?? null;
+
+    if (zone?.modelKey) {
+      showZoneModel(zone);
+    } else {
+      // Leaving a separate-model zone: hide every loaded zone model, restore the shared model.
+      for (const meshes of Object.values(zoneModelMeshesRef.current)) {
+        for (const mesh of meshes) mesh.setEnabled(false);
+      }
+      applyZoneVisibility(zone);
+    }
+
+    flyToZonePose(zone);
     if (!simulationMode) updateConfig({ activeZoneId: zone?.id ?? undefined });
-  }, [applyZoneVisibility, simulationMode]);
+  }, [applyZoneVisibility, flyToZonePose, showZoneModel, simulationMode]);
 
   /* ── HA config sync (Issue #8): push local edits, pull newer remote ──
    * The push hook itself is wired app-wide in App.tsx so edits made outside
@@ -202,6 +275,11 @@ export default function Dashboard() {
     [cardPanelOpen],
   );
   const [sidePanelConfig, setSidePanelConfig] = useState<import('../../types').SidePanelConfig | undefined>(undefined);
+  // Cards bound to a zone only show while that zone is active; unbound cards are global.
+  const visibleSidePanelConfig = useMemo(() => {
+    if (!sidePanelConfig) return sidePanelConfig;
+    return { ...sidePanelConfig, cards: sidePanelConfig.cards.filter((c) => !c.zoneId || c.zoneId === activeZoneId) };
+  }, [sidePanelConfig, activeZoneId]);
   const [showTour, setShowTour] = useState(
     () => localStorage.getItem('showTour') === 'true',
   );
@@ -880,7 +958,9 @@ export default function Dashboard() {
           const savedZone = cfgZones.find((z) => z.id === configRef.current?.activeZoneId) ?? null;
           if (savedZone) {
             setActiveZoneId(savedZone.id);
-            applyZoneVisibility(savedZone);
+            activeZoneIdRef.current = savedZone.id;
+            if (savedZone.modelKey) showZoneModel(savedZone);
+            else applyZoneVisibility(savedZone);
           }
         }
 
@@ -1781,9 +1861,9 @@ export default function Dashboard() {
 
 
   return (
-    <div className="dashboard-wrapper" style={{ '--panel-size': `${(sidePanelConfig?.cards?.length || gridEditMode) ? panelSize : 0}px` } as React.CSSProperties}>
+    <div className="dashboard-wrapper" style={{ '--panel-size': `${(visibleSidePanelConfig?.cards?.length || gridEditMode) ? panelSize : 0}px` } as React.CSSProperties}>
       <SidePanel
-        config={sidePanelConfig}
+        config={visibleSidePanelConfig}
         ha={haRef.current}
         cardStates={cardStates}
         onSettingsOpen={() => setSettingsOpen(true)}
@@ -1816,6 +1896,7 @@ export default function Dashboard() {
         <CardPropertiesPanel
           card={editingCard}
           haEntities={cardPanelEntities}
+          zones={zones}
           onSave={handleCardSave}
           onCancel={() => { setCardPanelOpen(false); setEditingCard(null); }}
           onPreview={handleCardPreview}

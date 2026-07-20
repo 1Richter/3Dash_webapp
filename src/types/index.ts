@@ -354,6 +354,8 @@ interface BaseCard {
   title: string;
   showTitle?: boolean;
   layout: CardLayout;
+  /** Only shown while this zone is active. Undefined/omitted = shown on every zone (global card). */
+  zoneId?: string;
 }
 
 export interface ScriptCard extends BaseCard {

@@ -4,11 +4,13 @@ import {
   Server, Palette, Box, MonitorCloud, Hand, Cog, Info,
   Lightbulb, LayoutTemplate, ChevronLeft, X,
   Monitor, Smartphone, Search, RotateCw, Move,
-  Github, HeartHandshake, Scale, Layers, Plus, Trash2, Camera,
+  Github, HeartHandshake, Scale, Layers, Plus, Trash2, Camera, Upload,
 } from 'lucide-react';
 import { buildWsUrl, type HAConnectionStatus } from '../services/haWebSocket';
 import type { HASettings, ZoneCameraPose, ZoneConfig } from '../types';
 import { getConfig, resetConfig, updateConfig, exportBackup, importBackup, replaceConfig, applySharedSettings } from '../services/configApi';
+import { saveModel as saveZoneModel, deleteModel as deleteZoneModel } from '../services/storageApi';
+import { validateGlb } from '../utils/validateGlb';
 import { clearSettings, getSetting, getSettings, updateSettings } from '../services/settingsStore';
 import { pushConfigToHA, pullRemoteConfig } from '../services/haSync';
 import { showToast } from './Toast';
@@ -175,6 +177,35 @@ export default function SettingsModal({
   const updateZone = useCallback((index: number, patch: Partial<ZoneConfig>) => {
     setZonesDraft((zs) => zs.map((z, i) => (i === index ? { ...z, ...patch } : z)));
   }, []);
+  const [zoneModelBusy, setZoneModelBusy] = useState<string | null>(null);
+  const handleZoneModelUpload = useCallback(async (index: number, zone: ZoneConfig, file: File) => {
+    if (!file.name.toLowerCase().endsWith('.glb')) {
+      showToast('error', 'Only .glb files are supported');
+      return;
+    }
+    setZoneModelBusy(zone.id);
+    try {
+      const result = await validateGlb(file);
+      if (!result.valid) {
+        showToast('error', result.error ?? 'Not a valid 3D model');
+        return;
+      }
+      const key = zone.modelKey ?? `zone-model-${zone.id}`;
+      await saveZoneModel(file, key);
+      updateZone(index, { modelKey: key });
+      showToast('success', `Model saved for "${zone.name || 'zone'}" (${result.meshCount} meshes)`);
+    } catch {
+      showToast('error', 'Saving the model failed');
+    } finally {
+      setZoneModelBusy(null);
+    }
+  }, [updateZone]);
+  const handleZoneModelRemove = useCallback(async (index: number, zone: ZoneConfig) => {
+    if (!zone.modelKey) return;
+    await deleteZoneModel(zone.modelKey);
+    updateZone(index, { modelKey: undefined });
+    showToast('success', `Model removed for "${zone.name || 'zone'}" — falls back to mesh filter`);
+  }, [updateZone]);
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -1115,8 +1146,10 @@ export default function SettingsModal({
                   <div className="settings-section-label">Floors & Areas</div>
                   <div className="settings-zones-hint">
                     Zones show or hide parts of the model by mesh-name prefix
-                    (e.g. all ground-floor meshes named "GF_…"). Switch zones
-                    with the floating button on the dashboard.
+                    (e.g. all ground-floor meshes named "GF_…"), or a zone can
+                    have its own separate model uploaded below (for a second
+                    floor exported on its own, without merging files). Switch
+                    zones with the floating button on the dashboard.
                   </div>
                   {zonesDraft.map((z, i) => (
                     <div key={z.id} className="settings-zone-row">
@@ -1186,6 +1219,26 @@ export default function SettingsModal({
                         >
                           <Camera size={14} /> {z.cameraPose ? 'Update view' : 'Set view'}
                         </button>
+                        <label className="settings-action-btn" style={{ cursor: 'pointer' }}>
+                          <Upload size={14} />
+                          {zoneModelBusy === z.id ? 'Validating…' : z.modelKey ? 'Replace model' : 'Upload own model'}
+                          <input
+                            type="file"
+                            accept=".glb"
+                            style={{ display: 'none' }}
+                            disabled={zoneModelBusy === z.id}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleZoneModelUpload(i, z, f);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                        {z.modelKey && (
+                          <button className="settings-action-btn" onClick={() => handleZoneModelRemove(i, z)}>
+                            Clear model
+                          </button>
+                        )}
                         <button
                           className="settings-action-btn"
                           onClick={() => setZonesDraft((zs) => zs.filter((_, j) => j !== i))}
@@ -1193,6 +1246,12 @@ export default function SettingsModal({
                           <Trash2 size={14} /> Remove
                         </button>
                       </div>
+                      {z.modelKey && (
+                        <div className="settings-zones-hint">
+                          Own model set — this floor fully replaces the shared model instead of
+                          filtering it (mesh prefixes above are ignored while it's active).
+                        </div>
+                      )}
                     </div>
                   ))}
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
