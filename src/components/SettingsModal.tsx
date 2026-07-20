@@ -1207,6 +1207,18 @@ export default function SettingsModal({
                           </button>
                         </div>
                       </div>
+                      <div className="settings-ha-row">
+                        <div className="settings-ha-field" style={{ flex: 2 }}>
+                          <label className="settings-ha-label">Model file name (HA /local/3dash/&lt;name&gt;.glb)</label>
+                          <input
+                            className="settings-ha-input"
+                            type="text"
+                            placeholder="og"
+                            value={z.modelKey ?? ''}
+                            onChange={(e) => updateZone(i, { modelKey: e.target.value.trim() || undefined })}
+                          />
+                        </div>
+                      </div>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button
                           className="settings-action-btn"
