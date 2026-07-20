@@ -168,7 +168,9 @@ export default function Dashboard() {
    * model's visibility instead of mesh-filtering it: the main model and every
    * other separate-model zone are hidden, and this zone's meshes are loaded
    * (once, then cached) and shown. Zones without modelKey keep the cheaper
-   * mesh-filter behavior on the shared model.
+   * mesh-filter behavior on the shared model. Sourced from HA's
+   * /local/3dash/<modelKey>.glb first (same as the main model, cross-device
+   * and ETag-cached), falling back to a locally-uploaded copy.
    */
   const showZoneModel = useCallback(async (zone: ZoneConfig) => {
     const scene = sceneCtxRef.current?.scene;
@@ -188,9 +190,18 @@ export default function Dashboard() {
     if (zoneModelLoadingRef.current.has(key)) return;
     zoneModelLoadingRef.current.add(key);
     try {
-      const blob = await getZoneModel(key);
+      // Same source preference as the main model: HA's /local/3dash/<key>.glb
+      // (cross-device, ETag-cached) first, then a locally-uploaded fallback.
+      let blob: Blob | null = null;
+      const syncSettings = getSetting('sync');
+      if (syncSettings.modelSource === 'ha') {
+        blob = await fetchModelFromHA(key, () => {
+          showToast('info', `"${zone.name}" model updated on Home Assistant — reload to apply`);
+        });
+      }
+      if (!blob) blob = await getZoneModel(key);
       if (!blob) {
-        showToast('warning', `No model uploaded for "${zone.name}" yet — add one in Settings → Zones`);
+        showToast('warning', `No model found for "${zone.name}" — add one in Settings → Zones or deploy it to HA`);
         return;
       }
       if (activeZoneIdRef.current !== zone.id || sceneCtxRef.current?.scene !== scene) return;
