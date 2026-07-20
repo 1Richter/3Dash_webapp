@@ -42,9 +42,19 @@ import './App.css';
 const servedFromHA = window.location.pathname.includes('/local/');
 if (servedFromHA) {
   navigator.serviceWorker?.getRegistrations().then(async (regs) => {
-    if (!regs.length) return;
-    for (const r of regs) await r.unregister();
-    for (const k of await caches.keys()) await caches.delete(k);
+    // This page is commonly an iframe embedded in Home Assistant's own
+    // frontend on the same origin. getRegistrations() returns EVERY
+    // registration whose scope covers this page — including HA's own
+    // root-scoped PWA service worker — not just ones this app created.
+    // Only ever touch a registration scoped to 3Dash's own path.
+    const ownRegs = regs.filter((r) => r.scope.includes('/3dash/'));
+    if (!ownRegs.length) return;
+    for (const r of ownRegs) await r.unregister();
+    // Same reasoning for caches: only remove ones this app's SW created
+    // (see vite.config.ts's workbox.cacheId), never HA's own.
+    for (const k of await caches.keys()) {
+      if (k.startsWith('3dash-')) await caches.delete(k);
+    }
     // Detach this page from the stale worker exactly once
     if (navigator.serviceWorker.controller && !sessionStorage.getItem('3dash_sw_purged')) {
       sessionStorage.setItem('3dash_sw_purged', '1');

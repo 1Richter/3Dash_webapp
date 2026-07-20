@@ -14,6 +14,12 @@ export default defineConfig(({ mode }) => {
       // Use the existing manifest.json in public/
       manifest: false,
       workbox: {
+        // Distinct prefix on every cache this app's SW creates, so a stale-SW
+        // cleanup (main.tsx, HA-hosted mode) can safely identify and remove
+        // only 3Dash's own caches — this app is often embedded in an iframe
+        // on the same origin as Home Assistant's own frontend, which has its
+        // own service worker and caches that must never be touched.
+        cacheId: '3dash',
         // Precache all built assets (JS, CSS, HTML)
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],
         // Babylon.js bundle is ~7MB — allow precaching since this is a local app
