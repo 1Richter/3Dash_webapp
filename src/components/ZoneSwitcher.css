@@ -1,83 +1,53 @@
 .zone-switcher {
   position: absolute;
-  bottom: 84px;
-  right: 16px;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid var(--border, #1e293b);
+  background: var(--panel-bg, rgba(15, 23, 42, 0.85));
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
   z-index: 40;
   pointer-events: auto;
 }
 
-.zone-fab {
+.zone-level {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px;
-  min-width: 44px;
-  min-height: 44px;
   justify-content: center;
-  border-radius: 999px;
-  border: 1px solid var(--border, #1e293b);
-  background: var(--panel-bg, rgba(15, 23, 42, 0.85));
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
   color: var(--text, #e2e8f0);
   cursor: pointer;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-  transition: border-color 0.15s, transform 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
-.zone-fab:hover {
-  border-color: var(--green, #4ade80);
-  transform: translateY(-1px);
+.zone-level:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.zone-fab-label {
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding-right: 4px;
+.zone-level.active {
+  background: var(--green, #4ade80);
+  color: #0f172a;
 }
 
-.zone-switcher-menu {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  animation: zone-menu-in 0.18s ease-out;
-}
-
-.zone-pill {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border, #1e293b);
-  background: var(--panel-bg, rgba(15, 23, 42, 0.85));
-  color: var(--text, #e2e8f0);
-  font-size: 12.5px;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.zone-pill:hover { border-color: var(--green, #4ade80); }
-
-.zone-pill.active {
-  border-color: var(--green, #4ade80);
-  color: var(--green, #4ade80);
-}
-
-@keyframes zone-menu-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+.zone-level-all {
+  margin-top: 4px;
+  border-top: 1px solid var(--border, #1e293b);
+  border-radius: 10px 10px 10px 10px;
+  padding-top: 6px;
 }
 
 @media (max-width: 768px) {
-  .zone-switcher { bottom: 96px; right: 12px; }
+  .zone-switcher { left: 10px; }
+  .zone-level { width: 32px; height: 32px; }
 }

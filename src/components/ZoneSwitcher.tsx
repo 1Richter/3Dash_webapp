@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Layers } from 'lucide-react';
 import LucideIcon from './SidePanel/cards/LucideIcon';
 import type { ZoneConfig } from '../types';
@@ -12,55 +11,39 @@ interface Props {
 }
 
 /**
- * Floating action button for switching between floors / areas
- * (e.g. Outside, Ground Floor, First Floor, Garage, Garden).
- * Collapsed: a single layers button. Expanded: one pill per zone.
+ * Always-visible vertical stack of floor/area buttons on the left edge of
+ * the canvas — the indoor-level-picker pattern from Google Maps (malls,
+ * airports), rather than a menu that has to be opened first. Top of the
+ * stack is the first configured zone (highest floor, by convention); "All"
+ * pins to the bottom like a ground-level "lobby" entry.
  */
 export default function ZoneSwitcher({ zones, activeZoneId, onSelect }: Props) {
-  const [open, setOpen] = useState(false);
-
   if (zones.length === 0) return null;
 
-  const active = zones.find((z) => z.id === activeZoneId) ?? null;
-
-  const select = (id: string | null) => {
-    onSelect(id);
-    setOpen(false);
-  };
-
   return (
-    <div className={`zone-switcher${open ? ' open' : ''}`}>
-      {open && (
-        <div className="zone-switcher-menu" role="menu">
-          <button
-            role="menuitem"
-            className={`zone-pill${!active ? ' active' : ''}`}
-            onClick={() => select(null)}
-          >
-            <Layers size={15} />
-            <span>All</span>
-          </button>
-          {zones.map((z) => (
-            <button
-              key={z.id}
-              role="menuitem"
-              className={`zone-pill${active?.id === z.id ? ' active' : ''}`}
-              onClick={() => select(z.id)}
-            >
-              {z.icon ? <LucideIcon name={z.icon} size={15} /> : <Layers size={15} />}
-              <span>{z.name}</span>
-            </button>
-          ))}
-        </div>
-      )}
+    <div className="zone-switcher" role="menu" aria-label="Switch floor">
+      {zones.map((z) => (
+        <button
+          key={z.id}
+          role="menuitem"
+          title={z.name}
+          aria-label={z.name}
+          aria-current={activeZoneId === z.id}
+          className={`zone-level${activeZoneId === z.id ? ' active' : ''}`}
+          onClick={() => onSelect(z.id)}
+        >
+          {z.icon ? <LucideIcon name={z.icon} size={18} /> : <Layers size={18} />}
+        </button>
+      ))}
       <button
-        className="zone-fab"
-        aria-label="Switch zone"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        role="menuitem"
+        title="All floors"
+        aria-label="All floors"
+        aria-current={activeZoneId === null}
+        className={`zone-level zone-level-all${activeZoneId === null ? ' active' : ''}`}
+        onClick={() => onSelect(null)}
       >
-        {active?.icon ? <LucideIcon name={active.icon} size={20} /> : <Layers size={20} />}
-        {active && <span className="zone-fab-label">{active.name}</span>}
+        <Layers size={18} />
       </button>
     </div>
   );
