@@ -344,6 +344,11 @@
   border: 1px solid transparent;
 }
 
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn-primary {
   background: var(--accent-dim);
   border-color: var(--accent);

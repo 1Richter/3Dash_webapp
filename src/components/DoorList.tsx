@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { DoorConfig } from '../types';
 import type { DetectedOpening } from '../babylon/doorOpenings';
 import type { HAEntityOption } from './EntityPicker';
@@ -54,6 +54,8 @@ export default function DoorList({ detected, doors, haEntities, onChange, onHigh
   const unbound = detected.filter(o => !boundIds.has(o.key));
   const entities = useMemo(() => sortEntities([...haEntities, MOCK_ENTITY]), [haEntities]);
 
+  useEffect(() => onClearHighlight, [onClearHighlight]);
+
   const bind = (opening: DetectedOpening, entityId: string) => {
     if (!entityId) return;
     const door: DoorConfig = {
@@ -65,6 +67,7 @@ export default function DoorList({ detected, doors, haEntities, onChange, onHigh
       pivot: opening.pivot,
     };
     onChange([...doors, door]);
+    onClearHighlight();
     onPreviewSwing(door);
   };
 
@@ -76,6 +79,7 @@ export default function DoorList({ detected, doors, haEntities, onChange, onHigh
     const door = doors.find(d => d.id === id);
     if (door) onTest(door, false); // close before unbinding
     onChange(doors.filter(d => d.id !== id));
+    onClearHighlight();
   };
 
   const toggleTest = (door: DoorConfig) => {

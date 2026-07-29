@@ -1987,6 +1987,11 @@ export default function ConfigEditor() {
           <button className="btn btn-ghost" onClick={handleLoadConfig}>
             &uarr; Reload from server
           </button>
+          {hasMockBinding && (
+            <div className="sidebar-footer-hint" style={{ fontSize: 11, color: 'var(--muted)', padding: '0 4px 6px' }}>
+              Unbind the demo/mock contact sensor before saving.
+            </div>
+          )}
           <button
             className="btn btn-success"
             onClick={handleSaveConfig}

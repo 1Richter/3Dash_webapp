@@ -74,9 +74,9 @@ export async function fetchRegistries(conn: HAConnection): Promise<HARegistries 
 
 /**
  * Attach device_class/area_name/labels to a plain entity list. Registry data
- * wins when present; `stateDeviceClass` (from the live state attribute) is
- * the fallback for entities whose registry entry has no device_class —
- * some integrations only expose it on the state, not the registry.
+ * wins when present; when an entity has no registry entry (or the registry
+ * entry has no device_class), the input `HAEntityOption`'s existing value is
+ * kept as-is.
  */
 export function mergeEntityMetadata(
   entities: HAEntityOption[],
@@ -86,15 +86,12 @@ export function mergeEntityMetadata(
   return entities.map(e => {
     const reg = registries.entities[e.entity_id];
     const areaName = reg?.area_id ? registries.areas[reg.area_id]?.name : undefined;
-    const labelNames = (reg?.labels ?? [])
-      .map(id => registries.labels[id]?.name)
-      .filter((n): n is string => !!n);
     return {
       ...e,
       device_class: reg?.device_class ?? e.device_class,
       area_id: reg?.area_id ?? undefined,
       area_name: areaName,
-      labels: labelNames,
+      labels: reg?.labels ?? [],
     };
   });
 }

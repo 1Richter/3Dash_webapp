@@ -47,10 +47,11 @@ export default function EntityPicker({ value, onChange, onSelect, placeholder, e
   const [activeLabels, setActiveLabels] = useState<Set<string>>(new Set());
 
   const availableLabelIds = useMemo(() => {
+    const pool = filterPredicate && !showAll ? entities.filter(filterPredicate) : entities;
     const ids = new Set<string>();
-    for (const e of entities) for (const id of e.labels ?? []) ids.add(id);
+    for (const e of pool) for (const id of e.labels ?? []) ids.add(id);
     return [...ids];
-  }, [entities]);
+  }, [entities, filterPredicate, showAll]);
 
   const filtered = useMemo(() => {
     if (entities.length === 0) return [];
@@ -81,6 +82,11 @@ export default function EntityPicker({ value, onChange, onSelect, placeholder, e
     }
     return [...groups.entries()].sort(([a], [b]) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b));
   }, [filtered, groupByArea]);
+
+  const visualOrder = useMemo(
+    () => grouped ? grouped.flatMap(([, list]) => list) : filtered,
+    [grouped, filtered],
+  );
 
   const select = useCallback((entity: HAEntityOption) => {
     onChange(entity.entity_id);
@@ -138,7 +144,7 @@ export default function EntityPicker({ value, onChange, onSelect, placeholder, e
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       keyboardNavRef.current = true;
-      setHighlighted(h => Math.min(h + 1, filtered.length - 1));
+      setHighlighted(h => Math.min(h + 1, visualOrder.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       keyboardNavRef.current = true;
@@ -151,7 +157,7 @@ export default function EntityPicker({ value, onChange, onSelect, placeholder, e
     } else if (e.key === 'Escape') {
       setOpen(false);
     }
-  }, [open, filtered, highlighted, select, openDropdown]);
+  }, [open, filtered, visualOrder, highlighted, select, openDropdown]);
 
   const dropdownStyle: React.CSSProperties | undefined = rect ? {
     position: 'fixed',
@@ -221,14 +227,14 @@ export default function EntityPicker({ value, onChange, onSelect, placeholder, e
             </div>
           )}
           {filtered.length === 0 ? (
-            <div className="entity-picker-empty">No matching entities.</div>
+            <div className="entity-picker-empty" role="status">No matching entities.</div>
           ) : (
             <div id={listboxId} role="listbox">
               {(grouped ?? [['', filtered]] as [string, HAEntityOption[]][]).map(([groupName, groupEntities]) => (
                 <div key={groupName || '_flat'}>
                   {grouped && <div className="entity-picker-group-header">{groupName}</div>}
                   {groupEntities.map((e) => {
-                    const i = filtered.indexOf(e);
+                    const i = visualOrder.indexOf(e);
                     return (
                       <div
                         key={e.entity_id}
