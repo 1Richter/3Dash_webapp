@@ -502,11 +502,16 @@ export default function ConfigEditor() {
         tubesRef.current = config.tubes || [];
         setDoors(config.doors || []);
 
-        // Load model from the same source the dashboard uses (HA or device)
+        // Load model from the same source the dashboard uses (HA or device).
+        // A zone with its own model (ZoneConfig.modelKey) fully replaces the
+        // main model — mirrors Dashboard's showZoneModel selection, so the
+        // editor (and its door/window detection) sees what's actually active.
         let modelBlob: Blob | null = null;
         const syncSettings = getSetting('sync');
+        const activeZone = (config.zones || []).find((z) => z.id === config.activeZoneId);
+        const modelName = activeZone?.modelKey || syncSettings.modelName;
         if (syncSettings.modelSource === 'ha') {
-          modelBlob = await fetchModelFromHA(syncSettings.modelName);
+          modelBlob = await fetchModelFromHA(modelName);
           if (!modelBlob) {
             modelBlob = await getModelBlob();
           }
