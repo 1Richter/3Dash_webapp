@@ -466,6 +466,12 @@
 
 .field-input:focus { border-color: var(--accent); }
 
+.door-bind-input {
+  width: 100%;
+  margin-top: 6px;
+  box-sizing: border-box;
+}
+
 .field-select {
   background: var(--bg);
   border: 1px solid var(--border);

@@ -1,17 +1,37 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { DoorConfig } from '../types';
 import type { DetectedOpening } from '../babylon/doorOpenings';
 import type { HAEntityOption } from './EntityPicker';
+import EntityPicker from './EntityPicker';
+import type { HALabelInfo } from '../ha/registries';
+
+/** Synthetic contact sensor for previewing the highlight/swing loop without real hardware. Never sent to HA or saved. */
+export const MOCK_CONTACT_ENTITY_ID = 'binary_sensor.mock_contact_demo';
+
+const MOCK_ENTITY: HAEntityOption = {
+  entity_id: MOCK_CONTACT_ENTITY_ID,
+  friendly_name: 'Demo Contact Sensor (mock)',
+  device_class: 'door',
+};
+
+const CONTACT_DEVICE_CLASSES = new Set(['door', 'window', 'garage_door']);
+
+function isContactSensor(e: HAEntityOption): boolean {
+  return e.entity_id.startsWith('binary_sensor.') && !!e.device_class && CONTACT_DEVICE_CLASSES.has(e.device_class);
+}
 
 interface Props {
   detected: DetectedOpening[];
   doors: DoorConfig[];
   haEntities: HAEntityOption[];
   onChange: (doors: DoorConfig[]) => void;
-  /** Briefly highlight the opening's meshes in the 3D view. */
-  onHighlight: (opening: { meshNames: string[] }) => void;
+  /** Highlight the opening's meshes in the 3D view. Pass durationMs=0 for "until onClearHighlight". */
+  onHighlight: (opening: { meshNames: string[] }, durationMs?: number) => void;
+  /** Clear whatever is currently highlighted (used on row mouse-leave). */
+  onClearHighlight: () => void;
   /** Swing a door open/closed in the 3D view (editor preview). */
   onTest: (door: DoorConfig, open: boolean) => void;
+  labelRegistry?: Record<string, HALabelInfo>;
 }
 
 /** Contact-sensor-ish entities first, but allow anything. */
@@ -25,11 +45,11 @@ function sortEntities(entities: HAEntityOption[]): HAEntityOption[] {
  * Editor list for door/window openings detected from the model
  * (SweetHome3D naming convention). Bind each to a contact sensor.
  */
-export default function DoorList({ detected, doors, haEntities, onChange, onHighlight, onTest }: Props) {
+export default function DoorList({ detected, doors, haEntities, onChange, onHighlight, onClearHighlight, onTest, labelRegistry }: Props) {
   const [testOpen, setTestOpen] = useState<Record<string, boolean>>({});
   const boundIds = new Set(doors.map(d => d.id));
   const unbound = detected.filter(o => !boundIds.has(o.key));
-  const entities = sortEntities(haEntities);
+  const entities = useMemo(() => sortEntities([...haEntities, MOCK_ENTITY]), [haEntities]);
 
   const bind = (opening: DetectedOpening, entityId: string) => {
     if (!entityId) return;
@@ -76,7 +96,13 @@ export default function DoorList({ detected, doors, haEntities, onChange, onHigh
   return (
     <div className="door-list">
       {doors.map(door => (
-        <div key={door.id} className="door-list-item" style={{ padding: '8px 10px', borderBottom: '1px solid rgba(128,128,128,0.2)' }}>
+        <div
+          key={door.id}
+          className="door-list-item"
+          style={{ padding: '8px 10px', borderBottom: '1px solid rgba(128,128,128,0.2)' }}
+          onMouseEnter={() => onHighlight(door, 0)}
+          onMouseLeave={onClearHighlight}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span>{door.kind === 'window' ? '🪟' : '🚪'}</span>
             <strong style={{ flex: 1 }}>{door.label ?? door.id}</strong>
@@ -118,24 +144,30 @@ export default function DoorList({ detected, doors, haEntities, onChange, onHigh
         </div>
       )}
       {unbound.map(o => (
-        <div key={o.key} className="door-list-item" style={{ padding: '8px 10px', borderBottom: '1px solid rgba(128,128,128,0.2)' }}>
+        <div
+          key={o.key}
+          className="door-list-item"
+          style={{ padding: '8px 10px', borderBottom: '1px solid rgba(128,128,128,0.2)' }}
+          onMouseEnter={() => onHighlight(o, 0)}
+          onMouseLeave={onClearHighlight}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span>{o.kind === 'window' ? '🪟' : '🚪'}</span>
             <strong style={{ flex: 1 }}>{o.label}</strong>
             <button className="btn btn-ghost" title="Highlight in 3D view" onClick={() => onHighlight(o)}>⌖</button>
           </div>
-          <select
-            style={{ width: '100%', marginTop: 6 }}
-            defaultValue=""
-            onChange={e => bind(o, e.target.value)}
-          >
-            <option value="" disabled>Bind contact sensor…</option>
-            {entities.map(en => (
-              <option key={en.entity_id} value={en.entity_id}>
-                {en.friendly_name ? `${en.friendly_name} (${en.entity_id})` : en.entity_id}
-              </option>
-            ))}
-          </select>
+          <EntityPicker
+            value=""
+            onChange={() => { /* free typing not persisted; selection handled in onSelect */ }}
+            onSelect={en => bind(o, en.entity_id)}
+            placeholder="Bind contact sensor…"
+            entities={entities}
+            filterPredicate={isContactSensor}
+            filterToggleLabel="Show all entities"
+            groupByArea
+            labelRegistry={labelRegistry}
+            className="door-bind-input"
+          />
         </div>
       ))}
     </div>
