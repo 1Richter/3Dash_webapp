@@ -31,6 +31,8 @@ interface Props {
   onClearHighlight: () => void;
   /** Swing a door open/closed in the 3D view (editor preview). */
   onTest: (door: DoorConfig, open: boolean) => void;
+  /** Play the open-hold-close swing preview once, right after a sensor is bound. */
+  onPreviewSwing: (door: DoorConfig) => void;
   labelRegistry?: Record<string, HALabelInfo>;
 }
 
@@ -45,7 +47,7 @@ function sortEntities(entities: HAEntityOption[]): HAEntityOption[] {
  * Editor list for door/window openings detected from the model
  * (SweetHome3D naming convention). Bind each to a contact sensor.
  */
-export default function DoorList({ detected, doors, haEntities, onChange, onHighlight, onClearHighlight, onTest, labelRegistry }: Props) {
+export default function DoorList({ detected, doors, haEntities, onChange, onHighlight, onClearHighlight, onTest, onPreviewSwing, labelRegistry }: Props) {
   const [testOpen, setTestOpen] = useState<Record<string, boolean>>({});
   const [searchText, setSearchText] = useState<Record<string, string>>({});
   const boundIds = new Set(doors.map(d => d.id));
@@ -54,14 +56,16 @@ export default function DoorList({ detected, doors, haEntities, onChange, onHigh
 
   const bind = (opening: DetectedOpening, entityId: string) => {
     if (!entityId) return;
-    onChange([...doors, {
+    const door: DoorConfig = {
       id: opening.key,
       entityId,
       label: opening.label,
       kind: opening.kind,
       meshNames: opening.meshNames,
       pivot: opening.pivot,
-    }]);
+    };
+    onChange([...doors, door]);
+    onPreviewSwing(door);
   };
 
   const update = (id: string, patch: Partial<DoorConfig>) => {

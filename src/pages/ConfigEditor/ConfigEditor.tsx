@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { generateUUID } from '../../utils/uuid';
 import {
@@ -46,8 +46,9 @@ import ShadowWallList from '../../components/ShadowWallList';
 import ShadowWallForm, { type WallPreviewInfo } from '../../components/ShadowWallForm';
 import { arrayMove } from '@dnd-kit/sortable';
 import TubeList from '../../components/TubeList';
-import DoorList from '../../components/DoorList';
-import { detectOpenings, applyDoorState, resetDoorPivots, type DetectedOpening } from '../../babylon/doorOpenings';
+import DoorList, { MOCK_CONTACT_ENTITY_ID } from '../../components/DoorList';
+import { detectOpenings, applyDoorState, resetDoorPivots, highlightOpening, clearHighlight, previewSwing, type DetectedOpening } from '../../babylon/doorOpenings';
+import { fetchRegistries, mergeEntityMetadata, type HARegistries } from '../../ha/registries';
 import TubeForm, { type TubePreviewInfo } from '../../components/TubeForm';
 import { createTubeMeshes, removeTubeMeshes, disposeAllTubes, renderMockupLabels, type TubeMap } from '../../babylon/TubeMeshFactory';
 import GuidedTour from '../../components/GuidedTour/GuidedTour';
@@ -80,6 +81,7 @@ export default function ConfigEditor() {
   const tubeAnchorRef = useRef<Mesh | null>(null);
 
   const [haEntities, setHaEntities] = useState<HAEntityOption[]>(() => getEntityCache());
+  const [registries, setRegistries] = useState<HARegistries | null>(null);
   const [lights, setLights] = useState<LightConfig[]>([]);
   const [lightGroups, setLightGroups] = useState<LightGroup[]>([]);
   const [editIdx, setEditIdx] = useState<number | null>(null);
@@ -108,7 +110,11 @@ export default function ConfigEditor() {
       {
         onInitialStates: (states: HAState[]) => {
           const entities: HAEntityOption[] = states
-            .map(s => ({ entity_id: s.entity_id, friendly_name: s.attributes.friendly_name as string | undefined }))
+            .map(s => ({
+              entity_id: s.entity_id,
+              friendly_name: s.attributes.friendly_name as string | undefined,
+              device_class: s.attributes.device_class as string | undefined,
+            }))
             .sort((a, b) => a.entity_id.localeCompare(b.entity_id));
           setEntityCache(entities);
           setHaEntities(entities);
@@ -1746,14 +1752,23 @@ export default function ConfigEditor() {
   }, [position, tubePanelOpen]);
 
   // Save config to server
+  const hasMockBinding = useMemo(
+    () => doors.some(d => d.entityId === MOCK_CONTACT_ENTITY_ID),
+    [doors],
+  );
+
   const handleSaveConfig = useCallback(async () => {
+    if (hasMockBinding) {
+      alert('Unbind the demo/mock contact sensor before saving — it only exists for local preview and cannot be sent to Home Assistant.');
+      return;
+    }
     try {
       await updateConfig({ lights, lightGroups, displays, shadowWalls, tubes, doors });
       showToast(`Saved ${lights.length} lights + ${displays.length} displays + ${shadowWalls.length} walls + ${tubes.length} tubes + ${doors.length} doors to server`);
     } catch (e) {
       alert('Failed to save config: ' + (e instanceof Error ? e.message : e));
     }
-  }, [lights, displays, shadowWalls, tubes, doors, showToast]);
+  }, [lights, displays, shadowWalls, tubes, doors, showToast, hasMockBinding]);
 
   // Detect model openings whenever the doors tab is opened
   useEffect(() => {
@@ -1762,19 +1777,57 @@ export default function ConfigEditor() {
     if (scene) setDetectedOpenings(detectOpenings(scene));
   }, [editorMode]);
 
-  const handleHighlightOpening = useCallback((opening: { meshNames: string[] }) => {
+  // Lazily fetch HA entity/area/label registries the first time the Doors
+  // tab is opened — not needed for any other tab, and registries can be
+  // large, so this must not run on every ConfigEditor mount.
+  useEffect(() => {
+    if (editorMode !== 'doors' || registries) return;
+    const { mode, haSettings } = getSetting('connection');
+    const embedded = hasEmbeddedAuth() || (isEmbedded() && !haSettings.token && !hasOAuth());
+    if (mode !== 'live' || !haSettings.url || (!haSettings.token && !hasOAuth() && !embedded)) return;
+    const conn = new HAConnection(
+      embedded
+        ? { url: haSettings.url, port: haSettings.port, tokenProvider: getEmbeddedAccessToken }
+        : hasOAuth()
+          ? { url: haSettings.url, port: haSettings.port, tokenProvider: getOAuthAccessToken }
+          : { url: haSettings.url, port: haSettings.port, token: haSettings.token },
+      {
+        onStatusChanged: (status) => {
+          if (status !== 'connected') return;
+          fetchRegistries(conn).then(r => {
+            setRegistries(r);
+            conn.dispose();
+          });
+        },
+      },
+    );
+    conn.connect();
+    return () => conn.dispose();
+  }, [editorMode, registries]);
+
+  const doorPickerEntities = useMemo(
+    () => mergeEntityMetadata(haEntities, registries),
+    [haEntities, registries],
+  );
+
+  const handleHighlightOpening = useCallback((opening: { meshNames: string[] }, durationMs?: number) => {
     const scene = sceneCtxRef.current?.scene;
-    if (!scene) return;
-    const meshes = opening.meshNames
-      .map(n => scene.getMeshByName(n))
-      .filter((m): m is NonNullable<ReturnType<typeof scene.getMeshByName>> => !!m);
-    for (const m of meshes) m.showBoundingBox = true;
-    setTimeout(() => { for (const m of meshes) m.showBoundingBox = false; }, 1800);
+    if (scene) highlightOpening(scene, opening.meshNames, durationMs);
+  }, []);
+
+  const handleClearHighlight = useCallback(() => {
+    const scene = sceneCtxRef.current?.scene;
+    if (scene) clearHighlight(scene);
   }, []);
 
   const handleTestDoor = useCallback((door: DoorConfig, open: boolean) => {
     const scene = sceneCtxRef.current?.scene;
     if (scene) applyDoorState(scene, door, open);
+  }, []);
+
+  const handlePreviewSwing = useCallback((door: DoorConfig) => {
+    const scene = sceneCtxRef.current?.scene;
+    if (scene) previewSwing(scene, door);
   }, []);
 
   // Load config from server
@@ -1902,10 +1955,13 @@ export default function ConfigEditor() {
             <DoorList
               detected={detectedOpenings}
               doors={doors}
-              haEntities={haEntities}
+              haEntities={doorPickerEntities}
               onChange={setDoors}
               onHighlight={handleHighlightOpening}
+              onClearHighlight={handleClearHighlight}
+              onPreviewSwing={handlePreviewSwing}
               onTest={handleTestDoor}
+              labelRegistry={registries?.labels}
             />
           )}
         </div>
@@ -1931,7 +1987,12 @@ export default function ConfigEditor() {
           <button className="btn btn-ghost" onClick={handleLoadConfig}>
             &uarr; Reload from server
           </button>
-          <button className="btn btn-success" onClick={handleSaveConfig}>
+          <button
+            className="btn btn-success"
+            onClick={handleSaveConfig}
+            disabled={hasMockBinding}
+            title={hasMockBinding ? 'Unbind the demo/mock contact sensor first' : undefined}
+          >
             &darr; Save to server
           </button>
         </div>
