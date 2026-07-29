@@ -17,3 +17,4 @@ graphify-out/
 /*.glb
 /*.obj
 model*.glb
+.worktrees/
