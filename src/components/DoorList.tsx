@@ -47,6 +47,7 @@ function sortEntities(entities: HAEntityOption[]): HAEntityOption[] {
  */
 export default function DoorList({ detected, doors, haEntities, onChange, onHighlight, onClearHighlight, onTest, labelRegistry }: Props) {
   const [testOpen, setTestOpen] = useState<Record<string, boolean>>({});
+  const [searchText, setSearchText] = useState<Record<string, string>>({});
   const boundIds = new Set(doors.map(d => d.id));
   const unbound = detected.filter(o => !boundIds.has(o.key));
   const entities = useMemo(() => sortEntities([...haEntities, MOCK_ENTITY]), [haEntities]);
@@ -157,9 +158,9 @@ export default function DoorList({ detected, doors, haEntities, onChange, onHigh
             <button className="btn btn-ghost" title="Highlight in 3D view" onClick={() => onHighlight(o)}>⌖</button>
           </div>
           <EntityPicker
-            value=""
-            onChange={() => { /* free typing not persisted; selection handled in onSelect */ }}
-            onSelect={en => bind(o, en.entity_id)}
+            value={searchText[o.key] ?? ''}
+            onChange={v => setSearchText(prev => ({ ...prev, [o.key]: v }))}
+            onSelect={en => { bind(o, en.entity_id); setSearchText(prev => { const next = { ...prev }; delete next[o.key]; return next; }); }}
             placeholder="Bind contact sensor…"
             entities={entities}
             filterPredicate={isContactSensor}
