@@ -20,7 +20,7 @@
  * in DoorConfig so the dashboard can animate without re-detecting.
  */
 
-import { Scene, AbstractMesh, TransformNode, Animation, QuadraticEase, EasingFunction, Vector3 } from '@babylonjs/core';
+import { Scene, AbstractMesh, TransformNode, Animation, QuadraticEase, EasingFunction, Vector3, HighlightLayer, Color3, Mesh } from '@babylonjs/core';
 import type { DoorConfig } from '../types';
 
 const OPENING_RE = /^sweethome3d_(opening_on_hinge|window_pane_on_hinge)_(\d+)(?:_(.*?))?_?(\d+)$/;
@@ -168,6 +168,54 @@ export function detectOpenings(scene: Scene): DetectedOpening[] {
 
 const pivotNodes = new Map<string, TransformNode>();
 
+/* ── Highlight ── */
+
+let highlightLayer: HighlightLayer | null = null;
+let highlightedMeshNames: string[] = [];
+let highlightTimer: ReturnType<typeof setTimeout> | null = null;
+
+function getHighlightLayer(scene: Scene): HighlightLayer {
+  if (!highlightLayer || highlightLayer.getScene() !== scene) {
+    highlightLayer = new HighlightLayer('door-highlight-layer', scene);
+  }
+  return highlightLayer;
+}
+
+/** Remove any active highlight. Always safe to call, even if nothing is highlighted. */
+export function clearHighlight(scene: Scene): void {
+  if (highlightTimer) {
+    clearTimeout(highlightTimer);
+    highlightTimer = null;
+  }
+  if (!highlightedMeshNames.length) return;
+  const layer = getHighlightLayer(scene);
+  for (const name of highlightedMeshNames) {
+    const m = scene.getMeshByName(name);
+    if (m) layer.removeMesh(m as Mesh);
+  }
+  highlightedMeshNames = [];
+}
+
+/**
+ * Glow the given meshes green. Always clears any previous highlight first, so
+ * rapidly hovering across many rows never leaves orphaned glowing meshes.
+ * `durationMs = 0` means "leave highlighted until clearHighlight() is called"
+ * (used for hover); a positive value auto-clears after that many ms (used for
+ * the explicit bind/test actions).
+ */
+export function highlightOpening(scene: Scene, meshNames: string[], durationMs = 1800): void {
+  clearHighlight(scene);
+  const layer = getHighlightLayer(scene);
+  const meshes = meshNames
+    .map(n => scene.getMeshByName(n))
+    .filter((m): m is AbstractMesh => !!m);
+  for (const m of meshes) layer.addMesh(m as Mesh, Color3.Green());
+  highlightedMeshNames = meshNames;
+  if (durationMs > 0) {
+    highlightTimer = setTimeout(() => clearHighlight(scene), durationMs);
+  }
+}
+
 function pivotFor(scene: Scene, door: DoorConfig): TransformNode | null {
   const cached = pivotNodes.get(door.id);
   if (cached && !cached.isDisposed()) return cached;
@@ -187,6 +235,12 @@ function pivotFor(scene: Scene, door: DoorConfig): TransformNode | null {
 /** Forget cached pivots (call on scene dispose/rebuild). */
 export function resetDoorPivots(): void {
   pivotNodes.clear();
+  highlightLayer = null;
+  highlightedMeshNames = [];
+  if (highlightTimer) {
+    clearTimeout(highlightTimer);
+    highlightTimer = null;
+  }
 }
 
 /**
