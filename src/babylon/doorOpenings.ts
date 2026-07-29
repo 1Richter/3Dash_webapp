@@ -176,12 +176,14 @@ const pivotNodes = new Map<string, TransformNode>();
 /* ── Highlight ── */
 
 let highlightLayer: HighlightLayer | null = null;
+let highlightLayerScene: Scene | null = null;
 let highlightedMeshNames: string[] = [];
 let highlightTimer: ReturnType<typeof setTimeout> | null = null;
 
 function getHighlightLayer(scene: Scene): HighlightLayer {
-  if (!highlightLayer || highlightLayer.getScene() !== scene) {
+  if (!highlightLayer || highlightLayerScene !== scene) {
     highlightLayer = new HighlightLayer('door-highlight-layer', scene);
+    highlightLayerScene = scene;
   }
   return highlightLayer;
 }
@@ -241,6 +243,7 @@ function pivotFor(scene: Scene, door: DoorConfig): TransformNode | null {
 export function resetDoorPivots(): void {
   pivotNodes.clear();
   highlightLayer = null;
+  highlightLayerScene = null;
   highlightedMeshNames = [];
   if (highlightTimer) {
     clearTimeout(highlightTimer);
