@@ -26,6 +26,11 @@ import type { DoorConfig } from '../types';
 const OPENING_RE = /^sweethome3d_(opening_on_hinge|window_pane_on_hinge)_(\d+)(?:_(.*?))?_?(\d+)$/;
 const HINGE_RE = /^sweethome3d_hinge_\d+(?:_\d+)?_\d+$/;
 
+const SWING_FPS = 30;
+const SWING_FRAMES = SWING_FPS * 0.7;
+/** Wall-clock duration of the open/close tween in applyDoorState, in ms. */
+const SWING_DURATION_MS = (SWING_FRAMES / SWING_FPS) * 1000;
+
 export interface DetectedOpening {
   /** Stable key: kind + leaf mesh's export index. */
   key: string;
@@ -263,15 +268,43 @@ export function applyDoorState(
     node.rotation.y = target;
     return;
   }
-  const fps = 30;
-  const anim = new Animation(`door-${door.id}`, 'rotation.y', fps,
+  const anim = new Animation(`door-${door.id}`, 'rotation.y', SWING_FPS,
     Animation.ANIMATIONTYPE_FLOAT, Animation.ANIMATIONLOOPMODE_CONSTANT);
   anim.setKeys([
     { frame: 0, value: node.rotation.y },
-    { frame: fps * 0.7, value: target },
+    { frame: SWING_FRAMES, value: target },
   ]);
   const ease = new QuadraticEase();
   ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
   anim.setEasingFunction(ease);
-  scene.beginDirectAnimation(node, [anim], 0, fps * 0.7, false);
+  scene.beginDirectAnimation(node, [anim], 0, SWING_FRAMES, false);
+}
+
+/* ── Swing preview ── */
+
+const activePreviews = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Open the door, hold briefly, then close it again — used to preview a
+ * binding without needing the real contact sensor to change state.
+ * Cancels any preview already in progress for this door before starting,
+ * so rapid re-triggering (e.g. mashing the bind dropdown) never stacks
+ * overlapping open/close animations.
+ */
+export function previewSwing(scene: Scene, door: DoorConfig): void {
+  const existing = activePreviews.get(door.id);
+  if (existing) {
+    clearTimeout(existing);
+    activePreviews.delete(door.id);
+  }
+  const node = pivotFor(scene, door);
+  if (node) scene.stopAnimation(node);
+
+  applyDoorState(scene, door, true);
+  const HOLD_MS = SWING_DURATION_MS + 200; // pause after the open tween finishes
+  const timer = setTimeout(() => {
+    applyDoorState(scene, door, false);
+    activePreviews.delete(door.id);
+  }, HOLD_MS);
+  activePreviews.set(door.id, timer);
 }
